@@ -38,7 +38,7 @@ function badgeRow(sentiment) {
 function reportHTML(record, logoPath) {
   const hasEmail = record.attendeeEmail && record.hasValidEmail !== false;
   const logo = logoPath
-    ? `<img src="${logoPath}" alt="Logo" width="48" style="vertical-align:middle;margin-right:12px"/>`
+    ? `<img src="${logoPath}" alt="Logo" width="64" style="vertical-align:middle;margin-right:12px"/>`
     : '';
 
   return `<!DOCTYPE html>
@@ -102,7 +102,7 @@ function reportHTML(record, logoPath) {
 
 function combinedHTML(meta, rows, logoPath) {
   const logo = logoPath
-    ? `<img src="${logoPath}" alt="Logo" width="48" style="vertical-align:middle;margin-right:12px"/>`
+    ? `<img src="${logoPath}" alt="Logo" width="64" style="vertical-align:middle;margin-right:12px"/>`
     : '';
 
   const sections = rows.map((r, i) => `

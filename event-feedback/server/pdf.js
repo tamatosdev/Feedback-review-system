@@ -34,12 +34,16 @@ function drawHeader(doc, title, subtitle) {
   doc.y = MARGIN;
 
   const logoPath = findLogoPng();
-  const logoSize = 44;
+  const logoSize = 60;
   let textX = MARGIN;
+  let textOffsetY = 2;
   if (logoPath) {
     try {
-      doc.image(logoPath, MARGIN, doc.y, { width: logoSize });
+      const img = doc.openImage(logoPath);
+      const imgHeight = (img.height / img.width) * logoSize;
+      doc.image(img, MARGIN, doc.y, { width: logoSize });
       textX = MARGIN + logoSize + 14;
+      textOffsetY = Math.max(2, (imgHeight - 24) / 2);
     } catch {
       drawPlaceholderLogo(doc, MARGIN, doc.y, logoSize);
     }
@@ -47,7 +51,7 @@ function drawHeader(doc, title, subtitle) {
     drawPlaceholderLogo(doc, MARGIN, doc.y, logoSize);
   }
 
-  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(19).text(title, textX, doc.y + 2, { width: CONTENT_W - logoSize - 14 });
+  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(19).text(title, textX, doc.y + textOffsetY, { width: CONTENT_W - logoSize - 14 });
   if (subtitle) {
     doc.fillColor(GRAY).font('Helvetica').fontSize(10).text(subtitle, textX, doc.y + 4, { width: CONTENT_W - logoSize - 14 });
   }
