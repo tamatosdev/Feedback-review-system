@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Event Feedback</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: '#FFF000', brandDark: '#CCBF00', ink: '#111827' }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', Inter, Arial, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-ink antialiased">
+
+  <!-- ===== FORM ===== -->
+  <main id="formView" class="max-w-xl mx-auto px-4 py-10">
+
+    <div class="flex flex-col items-center mb-8">
+      <img src="/assets/logo.png" alt="Logo" class="w-16 h-16 drop-shadow-sm object-contain" />
+      <h1 class="mt-4 text-2xl font-extrabold tracking-tight">Event Feedback</h1>
+      <p class="text-sm text-gray-500 mt-1">We value your opinion — it takes less than a minute.</p>
+    </div>
+
+    <form id="feedbackForm" class="bg-white border-2 border-brand rounded-3xl shadow-lg p-6 sm:p-8 space-y-5">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+        <div>
+          <label for="eventName" class="block text-sm font-bold mb-1.5">Event Name *</label>
+          <input id="eventName" name="eventName" type="text" required
+            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
+        </div>
+        <div>
+          <label for="eventDate" class="block text-sm font-bold mb-1.5">Event Date *</label>
+          <input id="eventDate" name="eventDate" type="date" required
+            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
+        </div>
+        <div>
+          <label for="attendeeName" class="block text-sm font-bold mb-1.5">Attendee Name</label>
+          <input id="attendeeName" name="attendeeName" type="text" placeholder="Leave blank to stay anonymous"
+            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
+        </div>
+        <div>
+          <label for="attendeeEmail" class="block text-sm font-bold mb-1.5">Attendee Email</label>
+          <input id="attendeeEmail" name="attendeeEmail" type="email"
+            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
+        </div>
+      </div>
+
+      <div>
+        <label for="companyName" class="block text-sm font-bold mb-1.5">Company Name <span class="text-gray-400 font-normal">(optional)</span></label>
+        <input id="companyName" name="companyName" type="text"
+          class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
+      </div>
+
+      <div>
+        <span class="block text-sm font-bold mb-2">Rating *</span>
+        <div id="starRow" class="flex items-center gap-1">
+          <input type="hidden" name="rating" id="rating" value="5" />
+          <button type="button" data-star="1" aria-label="1 star" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
+          <button type="button" data-star="2" aria-label="2 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
+          <button type="button" data-star="3" aria-label="3 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
+          <button type="button" data-star="4" aria-label="4 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
+          <button type="button" data-star="5" aria-label="5 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
+          <span id="ratingLabel" class="ml-3 text-sm font-bold text-gray-600">5 / 5</span>
+        </div>
+      </div>
+
+      <div>
+        <label for="comments" class="block text-sm font-bold mb-1.5">Feedback / Comments *</label>
+        <textarea id="comments" name="comments" rows="4" required
+          class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"></textarea>
+      </div>
+
+      <div>
+        <label for="suggestions" class="block text-sm font-bold mb-1.5">Suggestions / Improvements</label>
+        <textarea id="suggestions" name="suggestions" rows="3"
+          class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"></textarea>
+      </div>
+
+      <button type="submit" id="submitBtn"
+        class="w-full bg-brand hover:bg-brandDark text-ink font-extrabold rounded-xl py-3.5 text-base transition shadow-sm active:scale-[.99] disabled:opacity-60 disabled:cursor-not-allowed">
+        Submit Feedback
+      </button>
+      <p id="formError" class="hidden text-sm font-semibold text-red-600 text-center"></p>
+    </form>
+  </main>
+
+  <!-- ===== SUCCESS ===== -->
+  <main id="successView" class="hidden max-w-xl mx-auto px-4 py-10">
+    <div class="bg-white border-2 border-brand rounded-3xl shadow-lg p-10 text-center">
+      <div class="mx-auto w-20 h-20 rounded-full bg-brand flex items-center justify-center shadow-sm">
+        <svg class="w-11 h-11 text-ink" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h2 class="mt-6 text-2xl font-extrabold tracking-tight">Thank you for your feedback!</h2>
+      <p class="mt-2 text-gray-500 text-sm">Your response has been recorded and sent to the organizing team.</p>
+      <button onclick="location.reload()" class="mt-8 bg-brand hover:bg-brandDark text-ink font-bold rounded-xl px-6 py-2.5 text-sm transition">
+        Submit Another Response
+      </button>
+    </div>
+  </main>
+
+  <script>
+    const starButtons = document.querySelectorAll('.star');
+    const ratingInput = document.getElementById('rating');
+    const ratingLabel = document.getElementById('ratingLabel');
+
+    function paintStars(n) {
+      starButtons.forEach((b, i) => {
+        b.classList.toggle('text-brand', i < n);
+        b.classList.toggle('text-gray-200', i >= n);
+      });
+      ratingInput.value = n;
+      ratingLabel.textContent = n + ' / 5';
+    }
+    starButtons.forEach((b) => {
+      b.addEventListener('click', () => paintStars(Number(b.dataset.star)));
+      b.addEventListener('mouseenter', () => paintStars(Number(b.dataset.star)));
+    });
+    document.getElementById('starRow').addEventListener('mouseleave', () => paintStars(Number(ratingInput.value)));
+    paintStars(5);
+
+    const form = document.getElementById('feedbackForm');
+    const errorEl = document.getElementById('formError');
+    const submitBtn = document.getElementById('submitBtn');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorEl.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting…';
+      const payload = Object.fromEntries(new FormData(form).entries());
+      try {
+        const res = await fetch('/api/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Submission failed.');
+        document.getElementById('formView').classList.add('hidden');
+        document.getElementById('successView').classList.remove('hidden');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Feedback';
+      }
+    });
+  </script>
+</body>
+</html>

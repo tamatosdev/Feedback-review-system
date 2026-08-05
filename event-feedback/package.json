@@ -1,0 +1,23 @@
+{
+  "name": "event-feedback-system",
+  "version": "1.0.0",
+  "description": "Event Feedback System: branded form -> AI analysis -> PDF -> SMTP email -> database -> dashboard analytics -> date-range reports",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"server/tests/*.test.js\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "better-sqlite3": "^13.0.2",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "nodemailer": "^9.0.3",
+    "pdfkit": "^0.19.1"
+  }
+}

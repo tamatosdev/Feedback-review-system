@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feedback Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: '#FFF000', brandDark: '#CCBF00', ink: '#111827' }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: 'Segoe UI', Inter, Arial, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-ink antialiased">
+
+  <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b-2 border-brand">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="/assets/logo.png" alt="Logo" class="w-11 h-11 object-contain" />
+        <div>
+          <h1 class="text-lg font-extrabold leading-tight">Feedback Dashboard</h1>
+          <p class="text-xs text-gray-500">Event feedback analytics</p>
+        </div>
+      </div>
+      <a href="/" class="text-sm font-bold text-ink bg-brand hover:bg-brandDark rounded-xl px-4 py-2 transition">Submit Feedback</a>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- Filters -->
+    <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5 space-y-4">
+      <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Filters</h2>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold mb-1">From</label>
+          <input id="filterFrom" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-1">To</label>
+          <input id="filterTo" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-1">Event Name</label>
+          <select id="filterEvent" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="">All events</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-1">Sentiment</label>
+          <select id="filterSentiment" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="">All</option>
+            <option value="Positive">Positive</option>
+            <option value="Neutral">Neutral</option>
+            <option value="Negative">Negative</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-3">
+        <button id="applyBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition">Apply Filters</button>
+        <button id="clearBtn" class="text-sm font-semibold text-gray-500 hover:text-ink px-2 transition">Clear</button>
+        <button id="combinedBtn" class="ml-auto bg-brand hover:bg-brandDark text-ink text-sm font-extrabold rounded-xl px-5 py-2.5 transition disabled:opacity-50 disabled:cursor-not-allowed">
+          Generate Combined Report for Selected Dates
+        </button>
+      </div>
+      <p id="combinedResult" class="hidden text-sm font-semibold"></p>
+    </section>
+
+    <!-- Stats -->
+    <section class="grid grid-cols-2 md:grid-cols-5 gap-4" id="statCards"></section>
+
+    <!-- Table -->
+    <section class="bg-white border border-gray-100 rounded-2xl shadow-md overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-extrabold">All Feedback</h2>
+        <span id="rowCount" class="text-xs font-bold text-gray-400"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+            <tr>
+              <th class="px-5 py-3 font-bold">Event</th>
+              <th class="px-5 py-3 font-bold">Rating</th>
+              <th class="px-5 py-3 font-bold">Sentiment</th>
+              <th class="px-5 py-3 font-bold">AI Summary</th>
+              <th class="px-5 py-3 font-bold">Highlights</th>
+              <th class="px-5 py-3 font-bold">Improvements</th>
+              <th class="px-5 py-3 font-bold">Urgency</th>
+              <th class="px-5 py-3 font-bold">Reports</th>
+              <th class="px-5 py-3 font-bold">Timestamp</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+      <p id="emptyState" class="hidden text-center text-gray-400 text-sm py-10">No feedback matches the selected filters.</p>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function currentFilters() {
+      const p = new URLSearchParams();
+      if ($('filterFrom').value) p.set('from', $('filterFrom').value);
+      if ($('filterTo').value) p.set('to', $('filterTo').value);
+      if ($('filterSentiment').value) p.set('sentiment', $('filterSentiment').value);
+      if ($('filterEvent').value) p.set('eventName', $('filterEvent').value);
+      return p;
+    }
+
+    const badgeClasses = {
+      Positive: 'bg-green-100 text-green-700',
+      Neutral: 'bg-orange-100 text-orange-700',
+      Negative: 'bg-red-100 text-red-700'
+    };
+    const urgencyClasses = {
+      Low: 'text-gray-500', Medium: 'text-orange-600 font-bold', High: 'text-red-600 font-extrabold'
+    };
+
+    function statCard(label, value, extra = '') {
+      return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+        <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${label}</p>
+        <p class="mt-2 text-3xl font-extrabold ${extra}">${value}</p>
+      </div>`;
+    }
+
+    async function loadAll() {
+      const p = currentFilters();
+      const [statsRes, listRes] = await Promise.all([
+        fetch('/api/stats?' + p.toString()),
+        fetch('/api/feedback?' + p.toString())
+      ]);
+      const stats = (await statsRes.json()).data;
+      const list = (await listRes.json()).data;
+
+      $('statCards').innerHTML =
+        statCard('Total Feedback', stats.total) +
+        statCard('Average Rating', stats.avgRating.toFixed(2)) +
+        statCard('Positive', stats.sentimentCounts.Positive, 'text-green-600') +
+        statCard('Neutral', stats.sentimentCounts.Neutral, 'text-orange-600') +
+        statCard('Negative', stats.sentimentCounts.Negative, 'text-red-600');
+
+      const evSelect = $('filterEvent');
+      const current = evSelect.value;
+      evSelect.innerHTML = '<option value="">All events</option>' + stats.events.map((e) => `<option ${e === current ? 'selected' : ''}>${e}</option>`).join('');
+
+      $('rowCount').textContent = list.length + ' result(s)';
+      $('emptyState').classList.toggle('hidden', list.length > 0);
+
+      $('tableBody').innerHTML = list.map((r) => `
+        <tr class="hover:bg-gray-50/60 transition">
+          <td class="px-5 py-4 font-bold">${r.eventName}<div class="text-xs font-normal text-gray-400">${r.attendeeName} · ${r.eventDate || 'no date'}</div></td>
+          <td class="px-5 py-4 font-extrabold">${r.rating}/5</td>
+          <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${badgeClasses[r.sentiment] || 'bg-gray-100 text-gray-600'}">${r.sentiment}</span></td>
+          <td class="px-5 py-4 max-w-[220px] text-gray-600"><div class="line-clamp-2" title="${r.summary.replace(/"/g, '&quot;')}">${r.summary}</div></td>
+          <td class="px-5 py-4 max-w-[200px] text-gray-600"><ul class="list-disc list-inside text-xs space-y-0.5">${(r.highlights || []).slice(0, 3).map((h) => `<li class="truncate" title="${h.replace(/"/g, '&quot;')}">${h}</li>`).join('')}</ul></td>
+          <td class="px-5 py-4 max-w-[200px] text-gray-600"><ul class="list-disc list-inside text-xs space-y-0.5">${(r.improvementSuggestions || []).slice(0, 3).map((s) => `<li class="truncate" title="${s.replace(/"/g, '&quot;')}">${s}</li>`).join('')}</ul></td>
+          <td class="px-5 py-4 ${urgencyClasses[r.urgency] || 'text-gray-500'}">${r.urgency}</td>
+          <td class="px-5 py-4 whitespace-nowrap"><a href="${r.pdfUrl}" target="_blank" class="text-brandDark font-bold underline underline-offset-2 hover:text-green-700">PDF</a> · <a href="${r.htmlUrl}" target="_blank" class="text-brandDark font-bold underline underline-offset-2 hover:text-green-700">HTML</a></td>
+          <td class="px-5 py-4 text-xs text-gray-500">${new Date(r.timestamp).toLocaleString()}</td>
+        </tr>`).join('');
+    }
+
+    function refreshEvents() {
+      fetch('/api/stats').then((r) => r.json()).then((j) => {
+        const sel = $('filterEvent');
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">All events</option>' + j.data.events.map((e) => `<option ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
+      }).catch(() => {});
+    }
+
+    $('applyBtn').addEventListener('click', loadAll);
+    $('clearBtn').addEventListener('click', () => {
+      $('filterFrom').value = '';
+      $('filterTo').value = '';
+      $('filterSentiment').value = '';
+      refreshEvents();
+      loadAll();
+    });
+
+    $('combinedBtn').addEventListener('click', async () => {
+      const btn = $('combinedBtn');
+      const from = $('filterFrom').value;
+      const to = $('filterTo').value;
+      if (!from || !to) {
+        alert('Please select a From and To date first.');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = 'Generating combined report…';
+      const resultEl = $('combinedResult');
+      resultEl.classList.remove('hidden');
+      resultEl.className = 'text-sm font-semibold';
+      resultEl.textContent = 'Analyzing ' + from + ' → ' + to + ' with Gemini, generating PDF and emailing admin…';
+      try {
+        const res = await fetch('/api/reports/combined', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ from, to })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Generation failed.');
+        resultEl.innerHTML = `Combined report for <b>${json.count}</b> submission(s) ready — <a href="${json.pdfUrl}" target="_blank" class="text-brandDark underline font-bold">open PDF</a>. Email to admin: <b>${json.emailSent ? 'sent ✔' : 'skipped (' + (json.emailError || 'no SMTP credentials') + ')'}</b>`;
+      } catch (err) {
+        resultEl.className = 'text-sm font-semibold text-red-600';
+        resultEl.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Generate Combined Report for Selected Dates';
+      }
+    });
+
+    loadAll().catch((e) => alert('Failed to load dashboard: ' + e.message));
+  </script>
+</body>
+</html>
