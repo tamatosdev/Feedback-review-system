@@ -217,7 +217,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/api/health', (req, res) => res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass }));
 
 app.listen(PORT, () => {
-  console.log(`Event Feedback System running at ${PUBLIC_URL}`);
+  console.log(`Client Feedback System running at ${PUBLIC_URL}`);
   console.log(`  Gemini: ${geminiApiKey ? 'configured' : 'NOT configured (fallback analysis used)'}`);
   console.log(`  SMTP:   ${smtpConfig.smtpPass ? 'configured' : 'NOT configured (emails skipped)'}`);
 });

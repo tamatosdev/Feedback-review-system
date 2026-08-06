@@ -14,10 +14,10 @@ function createTransport(config) {
 
 function feedbackEmailBody(record, pdfUrl) {
   return [
-    `New event feedback received.`,
+    `New client feedback received.`,
     ``,
-    `Event Name: ${record.eventName}`,
-    `Rating: ${record.rating}/5`,
+    `Project Name / Service Name: ${record.eventName}`,
+    `Overall Rating: ${record.rating}/5`,
     `Sentiment: ${record.sentiment}`,
     `Urgency: ${record.urgency}`,
     ``,
@@ -34,7 +34,7 @@ function feedbackEmailBody(record, pdfUrl) {
 function combinedEmailBody(meta, pdfUrl, count) {
   const b = meta.overallSentimentBreakdown;
   return [
-    `Combined event feedback report for ${meta.from} → ${meta.to}.`,
+    `Combined client feedback report for ${meta.from} → ${meta.to}.`,
     `Submissions included: ${count}`,
     ``,
     `Overall Summary:`,
@@ -60,9 +60,9 @@ function combinedEmailBody(meta, pdfUrl, count) {
 async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl) {
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
-    from: `"Event Feedback" <${config.smtpUser}>`,
+    from: `"Client Feedback" <${config.smtpUser}>`,
     to: config.adminEmail,
-    subject: `New Event Feedback – ${record.eventName} (${record.rating}/5)`,
+    subject: `New Client Feedback – ${record.eventName} (${record.rating}/5)`,
     text: feedbackEmailBody(record, pdfUrl),
     attachments: pdfBuffer
       ? [{ filename: `${record.submissionId}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]
@@ -74,9 +74,9 @@ async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl) {
 async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
-    from: `"Event Feedback" <${config.smtpUser}>`,
+    from: `"Client Feedback" <${config.smtpUser}>`,
     to: config.adminEmail,
-    subject: `Combined Feedback Report ${meta.from} to ${meta.to} (${count} submissions)`,
+    subject: `Combined Client Feedback Report ${meta.from} to ${meta.to} (${count} submissions)`,
     text: combinedEmailBody(meta, pdfUrl, count),
     attachments: pdfBuffer
       ? [{ filename: `combined-feedback-${meta.from}-to-${meta.to}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]

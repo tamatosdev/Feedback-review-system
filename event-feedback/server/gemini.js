@@ -4,7 +4,7 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 // Override with GEMINI_MODEL in .env if needed.
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
-const PROMPT_TEMPLATE = (data) => `You are an event feedback analyst. Analyze the following event feedback and return STRICTLY valid JSON with exactly these keys and no other text, no markdown fences, no explanation:
+const PROMPT_TEMPLATE = (data) => `You are a client feedback analyst. Analyze the following client feedback and return STRICTLY valid JSON with exactly these keys and no other text, no markdown fences, no explanation:
 
 {
   "sentiment": "Positive | Neutral | Negative",
@@ -15,10 +15,10 @@ const PROMPT_TEMPLATE = (data) => `You are an event feedback analyst. Analyze th
 }
 
 Feedback:
-Event Name: ${data.eventName}
-Rating: ${data.rating}/5
-Feedback/Comments: ${data.comments}
-Suggestions/Improvements: ${data.suggestions}`;
+Project Name / Service Name: ${data.eventName}
+Overall Rating: ${data.rating}/5
+Client Feedback/Comments: ${data.comments}
+Suggestions/Recommendations: ${data.suggestions}`;
 
 function ratingFallback(rating) {
   if (rating >= 4) return 'Positive';
@@ -112,10 +112,10 @@ async function analyzeFeedback(data, { apiKey } = {}) {
 
 async function analyzeCombined(feedbackRows, { apiKey } = {}) {
   const input = feedbackRows
-    .map((f, i) => `#${i + 1} Event: ${f.eventName} | Rating: ${f.rating}/5 | Comments: ${f.comments} | Suggestions: ${f.suggestions}`)
+    .map((f, i) => `#${i + 1} Project/Service: ${f.eventName} | Overall Rating: ${f.rating}/5 | Client Feedback: ${f.comments} | Suggestions: ${f.suggestions}`)
     .join('\n');
 
-  const prompt = `You are an event analytics analyst. Analyze the following batch of ${feedbackRows.length} event feedback submissions. Return STRICTLY valid JSON with exactly these keys and no other text, no markdown, no explanation:
+  const prompt = `You are a client analytics analyst. Analyze the following batch of ${feedbackRows.length} client feedback submissions. Return STRICTLY valid JSON with exactly these keys and no other text, no markdown, no explanation:
 
 {
   "overallSentimentBreakdown": {

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Feedback Dashboard</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
@@ -15,7 +18,7 @@
     };
   </script>
   <style>
-    body { font-family: 'Segoe UI', Inter, Arial, sans-serif; }
+    body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
   </style>
 </head>
 <body class="min-h-screen bg-white text-ink antialiased">
@@ -26,7 +29,7 @@
         <img src="/assets/logo.png" alt="Logo" class="w-16 h-16 object-contain shrink-0" />
         <div class="leading-tight">
           <h1 class="text-xl font-extrabold">Feedback Dashboard</h1>
-          <p class="text-xs text-gray-500 mt-0.5">Event feedback analytics</p>
+          <p class="text-xs text-gray-500 mt-0.5">Client feedback analytics</p>
         </div>
       </div>
       <a href="/" class="text-sm font-bold text-ink bg-brand hover:bg-brandDark rounded-xl px-4 py-2 transition">Submit Feedback</a>
@@ -48,9 +51,9 @@
           <input id="filterTo" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
-          <label class="block text-xs font-bold mb-1">Event Name</label>
+          <label class="block text-xs font-bold mb-1">Project / Service Name</label>
           <select id="filterEvent" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-            <option value="">All events</option>
+            <option value="">All projects / services</option>
           </select>
         </div>
         <div>
@@ -86,8 +89,8 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
             <tr>
-              <th class="px-5 py-3 font-bold">Event</th>
-              <th class="px-5 py-3 font-bold">Rating</th>
+              <th class="px-5 py-3 font-bold">Project / Service</th>
+              <th class="px-5 py-3 font-bold">Overall Rating</th>
               <th class="px-5 py-3 font-bold">Sentiment</th>
               <th class="px-5 py-3 font-bold">AI Summary</th>
               <th class="px-5 py-3 font-bold">Highlights</th>
@@ -143,14 +146,14 @@
 
       $('statCards').innerHTML =
         statCard('Total Feedback', stats.total) +
-        statCard('Average Rating', stats.avgRating.toFixed(2)) +
+        statCard('Average Overall Rating', stats.avgRating.toFixed(2)) +
         statCard('Positive', stats.sentimentCounts.Positive, 'text-green-600') +
         statCard('Neutral', stats.sentimentCounts.Neutral, 'text-orange-600') +
         statCard('Negative', stats.sentimentCounts.Negative, 'text-red-600');
 
       const evSelect = $('filterEvent');
       const current = evSelect.value;
-      evSelect.innerHTML = '<option value="">All events</option>' + stats.events.map((e) => `<option ${e === current ? 'selected' : ''}>${e}</option>`).join('');
+      evSelect.innerHTML = '<option value="">All projects / services</option>' + stats.events.map((e) => `<option ${e === current ? 'selected' : ''}>${e}</option>`).join('');
 
       $('rowCount').textContent = list.length + ' result(s)';
       $('emptyState').classList.toggle('hidden', list.length > 0);
@@ -173,7 +176,7 @@
       fetch('/api/stats').then((r) => r.json()).then((j) => {
         const sel = $('filterEvent');
         const cur = sel.value;
-        sel.innerHTML = '<option value="">All events</option>' + j.data.events.map((e) => `<option ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
+        sel.innerHTML = '<option value="">All projects / services</option>' + j.data.events.map((e) => `<option ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
       }).catch(() => {});
     }
 

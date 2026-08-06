@@ -45,33 +45,36 @@ function reportHTML(record, logoPath) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Event Feedback Report – ${esc(record.eventName)}</title>
+<title>Client Feedback Report – ${esc(record.eventName)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
-<body style="margin:0;padding:32px;background:#ffffff;color:${BLACK};font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">
+<body style="margin:0;padding:32px;background:#ffffff;color:${BLACK};font-family:'Inter',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:720px;margin:0 auto;border:2px solid ${ACCENT};border-radius:16px;overflow:hidden">
     <tr>
       <td style="padding:28px 32px;background:#ffffff;border-bottom:2px solid ${ACCENT}">
-        ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">Event Feedback Report</span>
+        ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">Client Feedback Report</span>
       </td>
     </tr>
     <tr>
       <td style="padding:28px 32px">
-        <h2 style="color:${ACCENT};text-shadow:0 1px 0 rgba(0,0,0,.25);font-size:18px;margin:24px 0 10px;letter-spacing:.5px">EVENT INFORMATION</h2>
+        <h2 style="color:${ACCENT};text-shadow:0 1px 0 rgba(0,0,0,.25);font-size:18px;margin:24px 0 10px;letter-spacing:.5px">PROJECT / SERVICE INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
-          ${infoRow('Event Name', record.eventName)}
-          ${infoRow('Event Date', record.eventDate || 'Not provided')}
-          ${infoRow('Rating', `${record.rating} / 5`)}
+          ${infoRow('Project Name / Service Name', record.eventName)}
+          ${infoRow('Service Date / Project Completion Date', record.eventDate || 'Not provided')}
+          ${infoRow('Overall Rating', `${record.rating} / 5`)}
           ${badgeRow(record.sentiment)}
         </table>
 
-        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">ATTENDEE INFORMATION</h2>
+        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">CLIENT INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
           ${infoRow('Name', record.attendeeName)}
           ${infoRow('Email', hasEmail ? record.attendeeEmail : 'Not provided')}
           ${infoRow('Company', record.companyName || 'Not provided')}
         </table>
 
-        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">RATING</h2>
+        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">OVERALL RATING</h2>
         <div style="border:1px solid #e5e7eb;border-radius:10px;padding:16px 20px">${stars(record.rating)}</div>
 
         <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">AI ANALYSIS</h2>
@@ -84,10 +87,10 @@ function reportHTML(record, logoPath) {
           <p style="margin:14px 0 0"><strong>Urgency:</strong> ${esc(record.urgency)}</p>
         </div>
 
-        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">ORIGINAL FEEDBACK</h2>
+        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">ORIGINAL CLIENT FEEDBACK</h2>
         <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px 20px">
-          <p style="margin:0 0 10px"><strong>Comments:</strong> ${esc(record.comments)}</p>
-          <p style="margin:0"><strong>Suggestions:</strong> ${esc(record.suggestions)}</p>
+          <p style="margin:0 0 10px"><strong>Client Feedback / Comments:</strong> ${esc(record.comments)}</p>
+          <p style="margin:0"><strong>Suggestions / Recommendations:</strong> ${esc(record.suggestions)}</p>
         </div>
 
         <p style="margin:30px 0 0;color:#6b7280;font-size:12px">
@@ -114,7 +117,7 @@ function combinedHTML(meta, rows, logoPath) {
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Summary:</strong> ${esc(r.summary)}</td></tr>
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Highlights:</strong> ${esc(r.highlights.join('; '))}</td></tr>
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Improvement Suggestions:</strong> ${esc(r.improvementSuggestions.join('; '))}</td></tr>
-    <tr><td style="padding:4px 0 10px;color:${BLACK}"><strong>Original comments:</strong> ${esc(r.comments)}</td></tr>`).join('');
+    <tr><td style="padding:4px 0 10px;color:${BLACK}"><strong>Original client feedback:</strong> ${esc(r.comments)}</td></tr>`).join('');
 
   const b = meta.overallSentimentBreakdown;
   const total = Math.max(1, b.positive + b.neutral + b.negative);
@@ -123,12 +126,15 @@ function combinedHTML(meta, rows, logoPath) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Combined Event Feedback Report – ${esc(meta.from)} to ${esc(meta.to)}</title>
+<title>Combined Client Feedback Report – ${esc(meta.from)} to ${esc(meta.to)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
 </head>
-<body style="margin:0;padding:32px;background:#ffffff;color:${BLACK};font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">
+<body style="margin:0;padding:32px;background:#ffffff;color:${BLACK};font-family:'Inter',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:760px;margin:0 auto;border:2px solid ${ACCENT};border-radius:16px;overflow:hidden">
     <tr><td style="padding:28px 32px;border-bottom:2px solid ${ACCENT}">
-      ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">Combined Event Feedback Report</span>
+      ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">Combined Client Feedback Report</span>
     </td></tr>
     <tr><td style="padding:28px 32px">
       <p style="margin:0;color:#6b7280;font-size:13px">Date range: ${esc(meta.from)} → ${esc(meta.to)} · ${rows.length} submission(s)</p>

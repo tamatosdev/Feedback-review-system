@@ -20,6 +20,22 @@ const SENTIMENT_COLORS = {
   Negative: { text: '#dc2626', bg: '#fee2e2' }
 };
 
+const FONT_DIR = path.join(__dirname, 'fonts');
+
+function registerFonts(doc) {
+  const regularPath = path.join(FONT_DIR, 'Inter-Regular.ttf');
+  const boldPath = path.join(FONT_DIR, 'Inter-Bold.ttf');
+  const hasRegular = fs.existsSync(regularPath);
+  const hasBold = fs.existsSync(boldPath);
+  if (hasRegular) doc.registerFont('Inter', regularPath);
+  if (hasBold) doc.registerFont('Inter-Bold', boldPath);
+  doc.interFonts = {
+    regular: hasRegular ? 'Inter' : 'Helvetica',
+    bold: hasBold ? 'Inter-Bold' : 'Helvetica-Bold'
+  };
+  return doc.interFonts;
+}
+
 function findLogoPng() {
   const candidates = [
     path.join(__dirname, '..', 'public', 'assets', 'logo.png'),
@@ -51,9 +67,9 @@ function drawHeader(doc, title, subtitle) {
     drawPlaceholderLogo(doc, MARGIN, doc.y, logoSize);
   }
 
-  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(19).text(title, textX, doc.y + textOffsetY, { width: CONTENT_W - logoSize - 14 });
+  doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(19).text(title, textX, doc.y + textOffsetY, { width: CONTENT_W - logoSize - 14 });
   if (subtitle) {
-    doc.fillColor(GRAY).font('Helvetica').fontSize(10).text(subtitle, textX, doc.y + 4, { width: CONTENT_W - logoSize - 14 });
+    doc.fillColor(GRAY).font(doc.interFonts.regular).fontSize(10).text(subtitle, textX, doc.y + 4, { width: CONTENT_W - logoSize - 14 });
   }
   doc.moveDown(1.2);
   doc.strokeColor(ACCENT).lineWidth(2.5).moveTo(MARGIN, doc.y).lineTo(PAGE_W - MARGIN, doc.y).stroke();
@@ -71,7 +87,7 @@ function drawPlaceholderLogo(doc, x, y, size) {
 function sectionHeading(doc, text) {
   ensureSpace(doc, 40);
   doc.moveDown(0.9);
-  doc.fillColor(HEADING).font('Helvetica-Bold').fontSize(12.5).text(text.toUpperCase(), { characterSpacing: 0.8 });
+  doc.fillColor(HEADING).font(doc.interFonts.bold).fontSize(12.5).text(text.toUpperCase(), { characterSpacing: 0.8 });
   doc.moveDown(0.4);
 }
 
@@ -88,8 +104,8 @@ function infoTable(doc, rows) {
     doc.rect(MARGIN, doc.y, labelW, rowH).fill(ROW_BG);
     doc.strokeColor(BORDER).lineWidth(1);
     doc.rect(MARGIN, doc.y, labelW, rowH).stroke();
-    doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(9.5).text(String(label), MARGIN + 10, doc.y + 8, { width: labelW - 20 });
-    doc.fillColor(BLACK).font('Helvetica').fontSize(9.5).text(String(value), MARGIN + labelW + 10, doc.y + 8, { width: CONTENT_W - labelW - 20 });
+    doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(9.5).text(String(label), MARGIN + 10, doc.y + 8, { width: labelW - 20 });
+    doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5).text(String(value), MARGIN + labelW + 10, doc.y + 8, { width: CONTENT_W - labelW - 20 });
     doc.y += rowH;
   }
   doc.moveDown(0.3);
@@ -108,13 +124,13 @@ function drawStars(doc, rating) {
       doc.circle(cx, y, r).stroke('#d1d5db');
     }
   }
-  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(10).text(`${rating} / 5`, startX + 5 * gap, y - 5);
+  doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(10).text(`${rating} / 5`, startX + 5 * gap, y - 5);
   doc.y = y + 22;
 }
 
 function drawBadge(doc, sentiment) {
   const c = SENTIMENT_COLORS[sentiment] || SENTIMENT_COLORS.Neutral;
-  doc.font('Helvetica-Bold').fontSize(10);
+  doc.font(doc.interFonts.bold).fontSize(10);
   const w = doc.widthOfString(sentiment) + 28;
   const h = 24;
   doc.roundedRect(MARGIN + 10, doc.y, w, h, 12).fill(c.bg);
@@ -124,9 +140,9 @@ function drawBadge(doc, sentiment) {
 
 function drawBullets(doc, items, label) {
   ensureSpace(doc, 20);
-  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(10).text(label);
+  doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(10).text(label);
   doc.moveDown(0.2);
-  doc.fillColor(BLACK).font('Helvetica').fontSize(9.5);
+  doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5);
   for (const item of items) {
     ensureSpace(doc, 30);
     doc.circle(MARGIN + 5, doc.y + 4.5, 2.2).fill(HEADING);
@@ -137,33 +153,33 @@ function drawBullets(doc, items, label) {
 
 function drawLabeledLine(doc, label, value) {
   ensureSpace(doc, 24);
-  doc.fillColor(BLACK).font('Helvetica-Bold').fontSize(10).text(label);
+  doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(10).text(label);
   doc.moveDown(0.15);
-  doc.fillColor(BLACK).font('Helvetica').fontSize(9.5).text(String(value), MARGIN + 16, doc.y, { width: CONTENT_W - 16 });
+  doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5).text(String(value), MARGIN + 16, doc.y, { width: CONTENT_W - 16 });
   doc.moveDown(0.4);
 }
 
 function writeFeedbackSection(doc, r, index, fullPage = true) {
-  const title = fullPage ? 'Event Feedback Report' : `#${index} – ${r.eventName}`;
+  const title = fullPage ? 'Client Feedback Report' : `#${index} – ${r.eventName}`;
   drawHeader(doc, fullPage ? title : title, fullPage ? `${r.eventName}` : `${r.attendeeName} · ${r.eventDate || 'no date'} · ${r.submissionId}`);
 
-  sectionHeading(doc, 'Event Information');
+  sectionHeading(doc, 'Project / Service Information');
   infoTable(doc, [
-    ['Event Name', r.eventName],
-    ['Event Date', r.eventDate || 'Not provided'],
-    ['Rating', `${r.rating} / 5`],
+    ['Project Name / Service Name', r.eventName],
+    ['Service Date / Project Completion Date', r.eventDate || 'Not provided'],
+    ['Overall Rating', `${r.rating} / 5`],
     ['Urgency', r.urgency]
   ]);
   drawBadge(doc, r.sentiment);
 
-  sectionHeading(doc, 'Attendee Information');
+  sectionHeading(doc, 'Client Information');
   infoTable(doc, [
     ['Name', r.attendeeName],
     ['Email', r.attendeeEmail && r.hasValidEmail !== false ? r.attendeeEmail : 'Not provided'],
     ['Company', r.companyName || 'Not provided']
   ]);
 
-  sectionHeading(doc, 'Rating');
+  sectionHeading(doc, 'Overall Rating');
   ensureSpace(doc, 40);
   drawStars(doc, r.rating);
 
@@ -172,18 +188,19 @@ function writeFeedbackSection(doc, r, index, fullPage = true) {
   drawBullets(doc, r.highlights, 'Highlights:');
   drawBullets(doc, r.improvementSuggestions, 'Improvement Suggestions:');
 
-  sectionHeading(doc, 'Original Feedback');
-  drawLabeledLine(doc, 'Comments:', r.comments);
-  drawLabeledLine(doc, 'Suggestions:', r.suggestions);
+  sectionHeading(doc, 'Original Client Feedback');
+  drawLabeledLine(doc, 'Client Feedback / Comments:', r.comments);
+  drawLabeledLine(doc, 'Suggestions / Recommendations:', r.suggestions);
 
   ensureSpace(doc, 30);
-  doc.fillColor(GRAY).font('Helvetica').fontSize(8.5)
+  doc.fillColor(GRAY).font(doc.interFonts.regular).fontSize(8.5)
     .text(`Submission ID: ${r.submissionId}   ·   Submitted: ${r.timestamp}`, MARGIN, PAGE_H - MARGIN - 20, { width: CONTENT_W });
 }
 
 function buildPdf(record) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
+    registerFonts(doc);
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
@@ -203,12 +220,13 @@ function buildPdf(record) {
 function buildCombinedPdf(meta, rows) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: MARGIN, bufferPages: true });
+    registerFonts(doc);
     const chunks = [];
     doc.on('data', (c) => chunks.push(c));
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    drawHeader(doc, 'Combined Event Feedback Report', `Date range: ${meta.from} → ${meta.to} · ${rows.length} submission(s)`);
+    drawHeader(doc, 'Combined Client Feedback Report', `Date range: ${meta.from} → ${meta.to} · ${rows.length} submission(s)`);
 
     sectionHeading(doc, 'Overall AI Analysis');
     drawLabeledLine(doc, 'Overall Summary:', meta.overallSummary);
@@ -236,7 +254,7 @@ function buildCombinedPdf(meta, rows) {
 }
 
 function drawFooter(doc, pageNum, total) {
-  doc.fillColor(GRAY).font('Helvetica').fontSize(8)
+  doc.fillColor(GRAY).font(doc.interFonts.regular).fontSize(8)
     .text(`Page ${pageNum} of ${total}`, MARGIN, PAGE_H - MARGIN, { width: CONTENT_W, align: 'right' });
 }
 

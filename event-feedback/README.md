@@ -1,4 +1,4 @@
-# Event Feedback System
+# Client Feedback System
 
 Branded feedback form → AI analysis (Gemini 2.5 Flash) → branded HTML/PDF report → SMTP email (Hostinger) → SQLite storage → analytics dashboard with date-range filters → date-range combined PDF reports + email.
 
