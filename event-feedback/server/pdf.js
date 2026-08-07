@@ -160,13 +160,15 @@ function drawLabeledLine(doc, label, value) {
 }
 
 function writeFeedbackSection(doc, r, index, fullPage = true) {
-  const title = fullPage ? 'Client Feedback Report' : `#${index} – ${r.eventName}`;
-  drawHeader(doc, fullPage ? title : title, fullPage ? `${r.eventName}` : `${r.attendeeName} · ${r.eventDate || 'no date'} · ${r.submissionId}`);
+  const service = r.serviceType || r.eventName;
+  const dateVal = r.month || r.eventDate;
+  const title = fullPage ? 'Client Feedback Report' : `#${index} – ${service}`;
+  drawHeader(doc, fullPage ? title : title, fullPage ? `${service}` : `${r.attendeeName} · ${dateVal || 'no date'} · ${r.submissionId}`);
 
   sectionHeading(doc, 'Project / Service Information');
   infoTable(doc, [
-    ['Project Name / Service Name', r.eventName],
-    ['Service Date / Project Completion Date', r.eventDate || 'Not provided'],
+    ['Project Name / Service Name', service],
+    ['Service Date / Project Completion Date', dateVal || 'Not provided'],
     ['Overall Rating', `${r.rating} / 5`],
     ['Urgency', r.urgency]
   ]);

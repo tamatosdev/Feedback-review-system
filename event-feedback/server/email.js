@@ -85,4 +85,49 @@ async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
   return info;
 }
 
-module.exports = { sendFeedbackEmail, sendCombinedEmail };
+function clientFeedbackRequestBody(client, link) {
+  const company = client.company_name || client.name || 'your service';
+  return [
+    `Hi ${client.name},`,
+    ``,
+    `Thank you for working with us. We'd love to hear how things went with ${client.service_type || 'our service'} so we can keep improving.`,
+    ``,
+    `Please take a minute to complete our short feedback form:`,
+    link,
+    ``,
+    `Your answers will only take about a minute — thank you for your time.`,
+    ``,
+    `Best regards,`,
+    `PureDesigners`
+  ].join('\n');
+}
+
+async function sendClientFeedbackRequest(config, client, link) {
+  const mailer = createTransport(config);
+  const company = client.company_name || client.name || 'Service';
+  const info = await mailer.sendMail({
+    from: `"PureDesigners" <${config.smtpUser}>`,
+    to: client.email,
+    subject: `Your feedback matters — ${company} service update`,
+    text: clientFeedbackRequestBody(client, link)
+  });
+  return info;
+}
+
+async function sendNoFeedbackEmail(config, from, to) {
+  const mailer = createTransport(config);
+  const info = await mailer.sendMail({
+    from: `"Client Feedback" <${config.smtpUser}>`,
+    to: config.adminEmail,
+    subject: `No client feedback received ${from} to ${to}`,
+    text: [
+      `No feedback submissions were received between ${from} and ${to}.`,
+      ``,
+      `No combined report was generated for this period.`,
+      ``
+    ].join('\n')
+  });
+  return info;
+}
+
+module.exports = { sendFeedbackEmail, sendCombinedEmail, sendClientFeedbackRequest, sendNoFeedbackEmail, clientFeedbackRequestBody };

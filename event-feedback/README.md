@@ -17,6 +17,10 @@ Then open:
 | ---------- | ----------------------- |
 | Form       | http://localhost:3000/  |
 | Dashboard  | http://localhost:3000/dashboard.html |
+| Manage Clients (internal) | http://localhost:3000/admin-clients.html |
+| Admin Sign In | http://localhost:3000/login.html |
+
+> **Admin login:** `dashboard.html` and `admin-clients.html` require signing in via `/login.html` (server-side session in a signed httpOnly cookie, 24h expiry). The admin APIs (`/api/clients`, `GET /api/feedback`, `/api/stats`, `/api/reports/combined`, `/api/cron/*`) require the same session and return 401 without it; pages redirect to `/login.html`. The public feedback form stays open. Auth needs all of `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `SESSION_SECRET` — if any is missing, auth is disabled and a warning is logged at startup (local dev only).
 
 ## Configure secrets (`.env`)
 
@@ -30,10 +34,14 @@ SMTP_USER=tahir@puredesigners.com
 SMTP_PASS=your_smtp_password                 # Hostinger mailbox password
 ADMIN_EMAIL=tahir@puredesigners.com          # organizer who receives every report
 PUBLIC_URL=http://localhost:3000             # change when deployed (used for PDF links in emails)
+ADMIN_USERNAME=admin                         # admin login username (set before deploying)
+ADMIN_PASSWORD=your_strong_admin_password    # admin login password (set before deploying)
+SESSION_SECRET=random_long_secret            # signs the admin session cookie (set before deploying)
 ```
 
 - Without `GEMINI_API_KEY` the system still works using rating-based fallback analysis.
 - Without `SMTP_PASS` emails are skipped (marked `emailSent: false`) — submissions still stored.
+- Without `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`SESSION_SECRET` admin pages/APIs are unprotected — a warning is logged at startup; always set all three before deploying publicly.
 
 ## Branding
 

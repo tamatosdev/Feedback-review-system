@@ -110,8 +110,8 @@ function combinedHTML(meta, rows, logoPath) {
 
   const sections = rows.map((r, i) => `
     <tr><td style="padding:22px 0 6px">
-      <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1} – ${esc(r.eventName)}</h3>
-      <span style="color:#6b7280;font-size:12px">${esc(r.attendeeName)} · ${esc(r.eventDate)} · ${esc(r.submissionId)}</span>
+      <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1} – ${esc(r.serviceType || r.eventName)}</h3>
+      <span style="color:#6b7280;font-size:12px">${esc(r.attendeeName)} · ${esc(r.month || r.eventDate)} · ${esc(r.submissionId)}</span>
       <div style="margin-top:8px">${stars(r.rating)} &nbsp; ${badge(r.sentiment)}</div>
     </td></tr>
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Summary:</strong> ${esc(r.summary)}</td></tr>

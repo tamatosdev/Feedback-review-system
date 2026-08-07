@@ -26,13 +26,13 @@
   <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b-2 border-brand">
     <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
       <div class="flex items-center gap-4">
-        <img src="/assets/logo.png" alt="Logo" class="w-16 h-16 object-contain shrink-0" />
-        <div class="leading-tight">
-          <h1 class="text-xl font-extrabold">Feedback Dashboard</h1>
-          <p class="text-xs text-gray-500 mt-0.5">Client feedback analytics</p>
-        </div>
+        <img src="/assets/logo.png" alt="Logo" class="w-24 h-24 object-contain shrink-0" />
       </div>
-      <a href="/" class="text-sm font-bold text-ink bg-brand hover:bg-brandDark rounded-xl px-4 py-2 transition">Submit Feedback</a>
+      <div class="flex items-center gap-3">
+        <a href="/admin-clients.html" class="text-sm font-bold text-white bg-ink hover:opacity-90 rounded-xl px-4 py-2 transition">Manage Clients</a>
+        <a href="/" class="text-sm font-bold text-ink bg-brand hover:bg-brandDark rounded-xl px-4 py-2 transition">Submit Feedback</a>
+        <button id="logoutBtn" class="text-sm font-semibold text-gray-500 hover:text-ink px-2 transition">Log out</button>
+      </div>
     </div>
   </header>
 
@@ -115,7 +115,7 @@
       if ($('filterFrom').value) p.set('from', $('filterFrom').value);
       if ($('filterTo').value) p.set('to', $('filterTo').value);
       if ($('filterSentiment').value) p.set('sentiment', $('filterSentiment').value);
-      if ($('filterEvent').value) p.set('eventName', $('filterEvent').value);
+      if ($('filterEvent').value) p.set('serviceType', $('filterEvent').value);
       return p;
     }
 
@@ -160,7 +160,7 @@
 
       $('tableBody').innerHTML = list.map((r) => `
         <tr class="hover:bg-gray-50/60 transition">
-          <td class="px-5 py-4 font-bold">${r.eventName}<div class="text-xs font-normal text-gray-400">${r.attendeeName} · ${r.eventDate || 'no date'}</div></td>
+          <td class="px-5 py-4 font-bold">${r.serviceType}<div class="text-xs font-normal text-gray-400">${r.attendeeName} · ${r.month || 'no date'}</div></td>
           <td class="px-5 py-4 font-extrabold">${r.rating}/5</td>
           <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${badgeClasses[r.sentiment] || 'bg-gray-100 text-gray-600'}">${r.sentiment}</span></td>
           <td class="px-5 py-4 max-w-[220px] text-gray-600"><div class="line-clamp-2" title="${r.summary.replace(/"/g, '&quot;')}">${r.summary}</div></td>
@@ -180,8 +180,7 @@
       }).catch(() => {});
     }
 
-    $('applyBtn').addEventListener('click', loadAll);
-    $('clearBtn').addEventListener('click', () => {
+    $('applyBtn').addEventListener('click', loadAll);    $('clearBtn').addEventListener('click', () => {
       $('filterFrom').value = '';
       $('filterTo').value = '';
       $('filterSentiment').value = '';
@@ -219,6 +218,11 @@
         btn.disabled = false;
         btn.textContent = 'Generate Combined Report for Selected Dates';
       }
+    });
+
+    $('logoutBtn').addEventListener('click', async () => {
+      try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+      window.location.href = '/login.html';
     });
 
     loadAll().catch((e) => alert('Failed to load dashboard: ' + e.message));

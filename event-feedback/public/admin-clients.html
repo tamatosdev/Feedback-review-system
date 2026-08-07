@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manage Clients — Feedback</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { brand: '#FFF000', brandDark: '#CCBF00', ink: '#111827' }
+        }
+      }
+    };
+  </script>
+  <style>
+    body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-ink antialiased">
+
+  <header class="sticky top-0 z-10 bg-white/90 backdrop-blur border-b-2 border-brand">
+    <div class="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <img src="/assets/logo.png" alt="Logo" class="w-24 h-24 object-contain shrink-0" />
+        <div>
+          <h1 class="font-extrabold tracking-tight">Manage Clients</h1>
+          <p class="text-xs text-gray-400 font-semibold">Internal admin — no client-facing access</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <a href="/dashboard.html" class="text-sm font-bold text-white bg-ink hover:opacity-90 rounded-xl px-4 py-2 transition">Dashboard</a>
+        <a href="/" class="text-sm font-bold text-ink bg-brand hover:bg-brandDark rounded-xl px-4 py-2 transition">Submit Feedback</a>
+        <button id="logoutBtn" class="text-sm font-semibold text-gray-500 hover:text-ink px-2 transition">Log out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
+
+    <!-- Upload clients -->
+    <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5 space-y-4">
+      <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Upload Clients (Excel / CSV)</h2>
+      <p class="text-xs text-gray-500 font-medium">Header row required: <b>Name</b>, <b>Email</b>, <b>Company Name</b> (optional), <b>Service Type</b>, <b>Status</b> (optional, defaults to active). Rows with missing/invalid emails or duplicate emails are skipped with a reason.</p>
+      <div class="flex flex-wrap items-center gap-3">
+        <input id="uploadFile" type="file" accept=".xlsx,.csv"
+          class="text-sm text-gray-600 file:mr-3 file:rounded-xl file:border file:border-gray-200 file:bg-gray-50 file:px-4 file:py-2 file:text-sm file:font-bold file:text-ink hover:file:bg-gray-100 transition" />
+        <button id="uploadBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">Upload</button>
+        <button id="templateBtn" class="text-sm font-semibold text-brandDark underline underline-offset-2 hover:text-ink px-1 transition">Download template (.csv)</button>
+      </div>
+      <p id="uploadError" class="hidden text-sm font-semibold text-red-600"></p>
+      <div id="uploadSummary" class="hidden"></div>
+    </section>
+
+    <!-- Add client -->
+    <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5 space-y-4">
+      <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Add New Client</h2>
+      <form id="clientForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+        <div>
+          <label for="name" class="block text-xs font-bold mb-1">Name *</label>
+          <input id="name" name="name" type="text" required placeholder="Client name"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="email" class="block text-xs font-bold mb-1">Email *</label>
+          <input id="email" name="email" type="email" required placeholder="client@example.com"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="companyName" class="block text-xs font-bold mb-1">Company Name</label>
+          <input id="companyName" name="companyName" type="text" placeholder="Optional"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="serviceType" class="block text-xs font-bold mb-1">Service Type</label>
+          <input id="serviceType" name="serviceType" type="text" placeholder="e.g. Branding Package"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="status" class="block text-xs font-bold mb-1">Status</label>
+          <select id="status" name="status"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+        </div>
+        <div class="sm:col-span-2 lg:col-span-5">
+          <button type="submit" id="addBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">Add Client</button>
+        </div>
+      </form>
+      <p id="formError" class="hidden text-sm font-semibold text-red-600"></p>
+    </section>
+
+    <!-- Clients table -->
+    <section class="bg-white border border-gray-100 rounded-2xl shadow-md overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+        <h2 class="font-extrabold">All Clients</h2>
+        <span id="rowCount" class="text-xs font-bold text-gray-400"></span>
+      </div>
+      <p id="message" class="hidden text-sm font-semibold px-5 pt-4"></p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+            <tr>
+              <th class="px-5 py-3 font-bold">Name</th>
+              <th class="px-5 py-3 font-bold">Email</th>
+              <th class="px-5 py-3 font-bold">Service Type</th>
+              <th class="px-5 py-3 font-bold">Status</th>
+              <th class="px-5 py-3 font-bold">Created</th>
+              <th class="px-5 py-3 font-bold">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody" class="divide-y divide-gray-100"></tbody>
+        </table>
+      </div>
+      <p id="emptyState" class="hidden text-center text-gray-400 text-sm py-10">No clients yet — add your first one above.</p>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const statusClasses = {
+      active: 'bg-green-100 text-green-700',
+      inactive: 'bg-gray-100 text-gray-600'
+    };
+
+    function esc(value) {
+      return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function showMessage(text, isError) {
+      const el = $('message');
+      el.classList.remove('hidden');
+      el.className = 'text-sm font-semibold px-5 pt-4 ' + (isError ? 'text-red-600' : 'text-green-600');
+      el.textContent = text;
+    }
+
+    function clearMessage() {
+      $('message').classList.add('hidden');
+    }
+
+    function renderClients(list) {
+      $('rowCount').textContent = list.length + ' client(s)';
+      $('emptyState').classList.toggle('hidden', list.length > 0);
+      $('tableBody').innerHTML = list.map((c) => `
+        <tr class="hover:bg-gray-50/60 transition">
+          <td class="px-5 py-4 font-bold">${esc(c.name)}<div class="text-xs font-normal text-gray-400">${esc(c.company_name || '—')}</div></td>
+          <td class="px-5 py-4 text-gray-600">${esc(c.email)}</td>
+          <td class="px-5 py-4 text-gray-600">${esc(c.service_type || '—')}</td>
+          <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${statusClasses[c.status] || 'bg-gray-100 text-gray-600'}">${esc(c.status)}</span></td>
+          <td class="px-5 py-4 text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</td>
+          <td class="px-5 py-4 whitespace-nowrap space-x-3">
+            <button data-action="toggle" data-id="${c.id}" data-status="${esc(c.status)}" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-bold text-gray-600 hover:border-brandDark hover:text-brandDark transition">
+              ${c.status === 'active' ? 'Set inactive' : 'Set active'}
+            </button>
+            <button data-action="delete" data-id="${c.id}" data-name="${esc(c.name)}" class="text-xs font-bold text-red-600 underline underline-offset-2 hover:text-red-700">Delete</button>
+          </td>
+        </tr>`).join('');
+    }
+
+    async function loadClients() {
+      try {
+        const res = await fetch('/api/clients');
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load clients.');
+        renderClients(json.data);
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    async function addClient(payload) {
+      const btn = $('addBtn');
+      btn.disabled = true;
+      btn.textContent = 'Adding…';
+      try {
+        const res = await fetch('/api/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to add client.');
+        $('clientForm').reset();
+        $('status').value = 'active';
+        $('formError').classList.add('hidden');
+        showMessage(`Client "${json.data.name}" added.`, false);
+        await loadClients();
+      } catch (err) {
+        $('formError').textContent = err.message;
+        $('formError').classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Add Client';
+      }
+    }
+
+    async function toggleClient(id, currentStatus) {
+      const next = currentStatus === 'active' ? 'inactive' : 'active';
+      try {
+        const res = await fetch(`/api/clients/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: next })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to update status.');
+        showMessage(`Client "${json.data.name}" is now ${next}.`, false);
+        await loadClients();
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    async function deleteClient(id, name) {
+      if (!confirm(`Delete client "${name}"? This removes them and their pending feedback requests. Feedback history is kept.`)) return;
+      try {
+        const res = await fetch(`/api/clients/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to delete client.');
+        showMessage(`Client "${name}" deleted (${json.data.removedFeedbackRequests} feedback request(s) removed).`, false);
+        await loadClients();
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    function uploadSummary(summary) {
+      const el = $('uploadSummary');
+      el.classList.remove('hidden');
+      const addedLine = `<p class="text-sm font-semibold ${summary.added ? 'text-green-600' : 'text-gray-600'}">${summary.added} client(s) added out of ${summary.total} row(s).</p>`;
+      const skippedList = summary.skipped.length
+        ? `<ul class="mt-1 text-xs text-red-600 space-y-0.5">${summary.skipped.map((s) => `<li>row ${s.row}: ${s.reason}</li>`).join('')}</ul>`
+        : '';
+      el.innerHTML = addedLine + skippedList;
+    }
+
+    async function uploadClients() {
+      const fileInput = $('uploadFile');
+      if (!fileInput.files || !fileInput.files.length) {
+        $('uploadError').textContent = 'Choose a .xlsx or .csv file first.';
+        $('uploadError').classList.remove('hidden');
+        return;
+      }
+      const btn = $('uploadBtn');
+      btn.disabled = true;
+      btn.textContent = 'Uploading…';
+      $('uploadError').classList.add('hidden');
+      $('uploadSummary').classList.add('hidden');
+      try {
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        const res = await fetch('/api/clients/bulk-upload', { method: 'POST', body: fd });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Upload failed.');
+        uploadSummary(json);
+        fileInput.value = '';
+        await loadClients();
+      } catch (err) {
+        $('uploadError').textContent = err.message;
+        $('uploadError').classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Upload';
+      }
+    }
+
+    $('uploadBtn').addEventListener('click', uploadClients);
+
+    $('templateBtn').addEventListener('click', () => {
+      const csv = 'Name,Email,Company Name,Service Type,Status\nAcme Inc,hello@acme.com,Acme Inc,Branding Package,active\n';
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'clients-template.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    $('clientForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = $('name').value.trim();
+      const email = $('email').value.trim();
+      if (!name) {
+        $('formError').textContent = 'Name is required.';
+        $('formError').classList.remove('hidden');
+        return;
+      }
+      if (!email || !EMAIL_RE.test(email)) {
+        $('formError').textContent = 'A valid email is required.';
+        $('formError').classList.remove('hidden');
+        return;
+      }
+      addClient({
+        name,
+        email,
+        company_name: $('companyName').value.trim(),
+        service_type: $('serviceType').value.trim(),
+        status: $('status').value
+      });
+    });
+
+    $('tableBody').addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-action]');
+      if (!btn) return;
+      if (btn.dataset.action === 'toggle') toggleClient(btn.dataset.id, btn.dataset.status);
+      if (btn.dataset.action === 'delete') deleteClient(btn.dataset.id, btn.dataset.name);
+    });
+
+    $('logoutBtn').addEventListener('click', async () => {
+      try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+      window.location.href = '/login.html';
+    });
+
+    loadClients().catch((e) => alert('Failed to load clients: ' + e.message));
+  </script>
+</body>
+</html>
