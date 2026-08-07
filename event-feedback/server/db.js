@@ -57,7 +57,12 @@ function normalizeRow(row) {
 if (!PG_MODE) {
   const Database = require('better-sqlite3');
   const dataDir = path.join(__dirname, '..', 'data');
-  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  try {
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+  } catch (err) {
+    // Read-only FS (e.g. Vercel serverless) — only matters when DB_PATH
+    // points somewhere writable; the /tmp fallback below is used instead.
+  }
 
   // Vercel serverless: default DB_PATH is unwritable -> fall back to /tmp
   // (ephemeral! use DATABASE_URL for persistence on Vercel).
@@ -68,10 +73,18 @@ if (!PG_MODE) {
     : process.env.VERCEL
       ? '/tmp/feedback.db'
       : path.join(dataDir, 'feedback.db');
-  if (!fs.existsSync(path.dirname(dbPath))) fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  try {
+    if (!fs.existsSync(path.dirname(dbPath))) fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+  } catch (err) {
+    console.warn('[db] could not create DB directory:', err.message);
+  }
 
   db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
+  try {
+    db.pragma('journal_mode = WAL');
+  } catch (err) {
+    console.warn('[db] WAL pragma failed:', err.message);
+  }
 }
 
 // ---------- Remote mode: Postgres (Neon / Supabase / RDS) ----------
