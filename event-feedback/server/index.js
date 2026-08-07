@@ -21,7 +21,11 @@ const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replac
 const APP_BASE_URL = (process.env.APP_BASE_URL || PUBLIC_URL).replace(/\/$/, '');
 
 const reportsDir = path.join(__dirname, '..', 'reports');
-if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+try {
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+} catch (err) {
+  console.warn('[Vercel] reports dir not writable, generated files will be skipped:', err.message);
+}
 
 const smtpConfig = {
   smtpHost: process.env.SMTP_HOST || 'smtp.hostinger.com',
@@ -147,7 +151,7 @@ app.post('/api/feedback', async (req, res) => {
     let clientId = null;
     let request = null;
     if (token) {
-      request = findFeedbackRequestByToken(token);
+      request = await findFeedbackRequestByToken(token);
       if (!request) {
         return res.status(400).json({ ok: false, error: 'This feedback link is invalid or has expired.' });
       }
@@ -157,7 +161,7 @@ app.post('/api/feedback', async (req, res) => {
       clientId = request.client_id;
     }
 
-    const client = clientId ? getClient(clientId) : null;
+    const client = clientId ? await getClient(clientId) : null;
     const cleaned = cleanData(body);
 
     if (client) {
@@ -199,7 +203,7 @@ app.post('/api/feedback', async (req, res) => {
       console.error('[Email] send failed:', err.message);
     }
 
-    insertFeedback({
+    await insertFeedback({
       submissionId: record.submissionId,
       timestamp: record.timestamp,
       serviceType: record.eventName,
@@ -222,7 +226,7 @@ app.post('/api/feedback', async (req, res) => {
     });
 
     if (request) {
-      markFeedbackRequestSubmitted(request.id);
+      await markFeedbackRequestSubmitted(request.id);
     }
 
     res.status(201).json({
@@ -252,9 +256,9 @@ app.post('/api/feedback', async (req, res) => {
 });
 
 // ---------- 2. List feedback with filters ----------
-app.get('/api/feedback', (req, res) => {
+app.get('/api/feedback', async (req, res) => {
   try {
-    const rows = queryFeedback({
+    const rows = await queryFeedback({
       from: req.query.from,
       to: req.query.to,
       sentiment: req.query.sentiment,
@@ -268,9 +272,9 @@ app.get('/api/feedback', (req, res) => {
 });
 
 // ---------- 3. Dashboard stats ----------
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
   try {
-    res.json({ ok: true, data: stats({ from: req.query.from, to: req.query.to }) });
+    res.json({ ok: true, data: await stats({ from: req.query.from, to: req.query.to }) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -320,8 +324,8 @@ function parseClientSheet(buffer) {
   return XLSX.utils.sheet_to_json(sheet, { defval: '' });
 }
 
-app.post('/api/clients/bulk-upload', (req, res) => {
-  clientUpload.single('file')(req, res, (uploadErr) => {
+app.post('/api/clients/bulk-upload', async (req, res) => {
+  clientUpload.single('file')(req, res, async (uploadErr) => {
     if (uploadErr) {
       if (uploadErr.code === 'LIMIT_FILE_SIZE') {
         return res.status(400).json({ ok: false, error: `File too large (max ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB).` });
@@ -350,7 +354,7 @@ app.post('/api/clients/bulk-upload', (req, res) => {
         return res.status(400).json({ ok: false, error: `Too many rows (${rows.length}). Max ${MAX_UPLOAD_ROWS} clients per upload.` });
       }
 
-      const existingEmails = new Set(listClientEmails());
+      const existingEmails = new Set(await listClientEmails());
       const batchEmails = new Set();
       const added = [];
       const skipped = [];
@@ -370,7 +374,7 @@ app.post('/api/clients/bulk-upload', (req, res) => {
           continue;
         }
 
-        const client = insertClient({
+        const client = await insertClient({
           name: mapped.name,
           email: mapped.email,
           company_name: mapped.company_name,
@@ -401,7 +405,7 @@ function requireSyncSecret(req, res, next) {
   next();
 }
 
-app.post('/api/clients/sync', requireSyncSecret, (req, res) => {
+app.post('/api/clients/sync', requireSyncSecret, async (req, res) => {
   try {
     const contentLength = Number(req.headers['content-length'] || 0);
     if (contentLength > MAX_UPLOAD_BYTES) {
@@ -420,21 +424,20 @@ app.post('/api/clients/sync', requireSyncSecret, (req, res) => {
     let inserted = 0;
     let updated = 0;
 
-    clients.forEach((raw, index) => {
-      const rowNum = index + 1;
+    for (const raw of clients) {
       const mapped = mapClientRow(raw);
       const reason = clientRowValidationError(mapped);
       if (reason) {
-        skipped.push({ row: rowNum, reason });
-        return;
+        skipped.push({ row: clients.indexOf(raw) + 1, reason });
+        continue;
       }
       const emailKey = mapped.email.toLowerCase();
       if (batchEmails.has(emailKey)) {
-        skipped.push({ row: rowNum, reason: 'duplicate email' });
-        return;
+        skipped.push({ row: clients.indexOf(raw) + 1, reason: 'duplicate email' });
+        continue;
       }
       batchEmails.add(emailKey);
-      const { action } = upsertClientByEmail({
+      const { action } = await upsertClientByEmail({
         name: mapped.name,
         email: mapped.email,
         company_name: mapped.company_name,
@@ -443,7 +446,7 @@ app.post('/api/clients/sync', requireSyncSecret, (req, res) => {
       });
       if (action === 'inserted') inserted += 1;
       else updated += 1;
-    });
+    }
 
     console.log(`[ClientSync] ${clients.length} rows: ${inserted} inserted, ${updated} updated, ${skipped.length} skipped`);
     res.json({ ok: true, inserted, updated, skipped, total: clients.length });
@@ -453,7 +456,7 @@ app.post('/api/clients/sync', requireSyncSecret, (req, res) => {
   }
 });
 
-app.post('/api/clients', (req, res) => {
+app.post('/api/clients', async (req, res) => {
   try {
     const { name, email, company_name, service_type, status } = req.body || {};
     if (!name || !String(name).trim()) {
@@ -465,7 +468,7 @@ app.post('/api/clients', (req, res) => {
     if (status && !['active', 'inactive'].includes(status)) {
       return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
     }
-    const client = insertClient({
+    const client = await insertClient({
       name,
       email,
       company_name,
@@ -479,23 +482,23 @@ app.post('/api/clients', (req, res) => {
   }
 });
 
-app.get('/api/clients', (req, res) => {
+app.get('/api/clients', async (req, res) => {
   try {
-    const rows = listClients();
+    const rows = await listClients();
     res.json({ ok: true, count: rows.length, data: rows });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.patch('/api/clients/:id', (req, res) => {
+app.patch('/api/clients/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
     const { status } = req.body || {};
     if (!['active', 'inactive'].includes(status)) {
       return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
     }
-    const client = updateClientStatus(id, status);
+    const client = await updateClientStatus(id, status);
     if (!client) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });
     }
@@ -506,10 +509,10 @@ app.patch('/api/clients/:id', (req, res) => {
   }
 });
 
-app.delete('/api/clients/:id', (req, res) => {
+app.delete('/api/clients/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { deleted, removedRequests } = deleteClient(id);
+    const { deleted, removedRequests } = await deleteClient(id);
     if (!deleted) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });
     }
@@ -529,7 +532,7 @@ app.post('/api/reports/combined', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Both from and to dates are required.' });
     }
 
-    const rows = queryFeedback({ from, to });
+    const rows = await queryFeedback({ from, to });
     if (!rows.length) {
       return res.status(404).json({ ok: false, error: `No feedback found between ${from} and ${to}.` });
     }
@@ -782,13 +785,13 @@ const linkInvalidPage = `<!DOCTYPE html>
 </body>
 </html>`;
 
-app.get('/feedback/:token', (req, res) => {
+app.get('/feedback/:token', async (req, res) => {
   try {
-    const request = findFeedbackRequestByToken(req.params.token);
+    const request = await findFeedbackRequestByToken(req.params.token);
     if (!request || request.submitted) {
       return res.status(200).send(linkInvalidPage);
     }
-    const client = getClient(request.client_id);
+    const client = await getClient(request.client_id);
     if (!client) {
       return res.status(200).send(linkInvalidPage);
     }
@@ -845,20 +848,30 @@ app.post('/api/cron/six-month-report', requireCronSecret, async (req, res) => {
 
 app.get('/api/health', (req, res) => res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass }));
 
-app.listen(PORT, () => {
-  console.log(`Client Feedback System running at ${PUBLIC_URL}`);
-  console.log(`  Gemini: ${geminiApiKey ? 'configured' : 'NOT configured (fallback analysis used)'}`);
-  console.log(`  SMTP:   ${smtpConfig.smtpPass ? 'configured' : 'NOT configured (emails skipped)'}`);
-  console.log(`  Cron monthly send:     "${MONTHLY_SEND_CRON}" (sendMonthlyFeedbackForms)`);
-  console.log(`  Cron 6-month report:   "${SIX_MONTH_REPORT_CRON}" (generateSixMonthReport)`);
-  if (ADMIN_AUTH_ENABLED) {
-    console.log('  Admin auth:           Session login ENABLED (ADMIN_USERNAME / ADMIN_PASSWORD / SESSION_SECRET)');
-  } else {
-    console.warn('  Admin auth:           DISABLED — ADMIN_USERNAME / ADMIN_PASSWORD / SESSION_SECRET not fully set. Admin pages and admin API endpoints are NOT password protected! Set them before deploying publicly.');
-  }
-  if (SYNC_SECRET) {
-    console.log('  Client sync:          X-Sync-Secret ENABLED (POST /api/clients/sync accepts requests)');
-  } else {
-    console.warn('  Client sync:          DISABLED — SYNC_SECRET not set. POST /api/clients/sync rejects all requests (fail closed).');
-  }
-});
+// Vercel serverless: the app is exported and never started here; the
+// /api/cron/* endpoints can still be triggered externally (cron scheduling
+// via Vercel Cron jobs instead of node-cron).
+if (require.main === module) {
+  cron.schedule(MONTHLY_SEND_CRON, () => runMonthlySend());
+  cron.schedule(SIX_MONTH_REPORT_CRON, () => runSixMonthReport());
+
+  app.listen(PORT, () => {
+    console.log(`Client Feedback System running at ${PUBLIC_URL}`);
+    console.log(`  Gemini: ${geminiApiKey ? 'configured' : 'NOT configured (fallback analysis used)'}`);
+    console.log(`  SMTP:   ${smtpConfig.smtpPass ? 'configured' : 'NOT configured (emails skipped)'}`);
+    console.log(`  Cron monthly send:     "${MONTHLY_SEND_CRON}" (sendMonthlyFeedbackForms)`);
+    console.log(`  Cron 6-month report:   "${SIX_MONTH_REPORT_CRON}" (generateSixMonthReport)`);
+    if (ADMIN_AUTH_ENABLED) {
+      console.log('  Admin auth:           Session login ENABLED (ADMIN_USERNAME / ADMIN_PASSWORD / SESSION_SECRET)');
+    } else {
+      console.warn('  Admin auth:           DISABLED — ADMIN_USERNAME / ADMIN_PASSWORD / SESSION_SECRET not fully set. Admin pages and admin API endpoints are NOT password protected! Set them before deploying publicly.');
+    }
+    if (SYNC_SECRET) {
+      console.log('  Client sync:          X-Sync-Secret ENABLED (POST /api/clients/sync accepts requests)');
+    } else {
+      console.warn('  Client sync:          DISABLED — SYNC_SECRET not set. POST /api/clients/sync rejects all requests (fail closed).');
+    }
+  });
+}
+
+module.exports = app;

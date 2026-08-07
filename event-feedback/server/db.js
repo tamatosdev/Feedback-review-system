@@ -1,21 +1,93 @@
-const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dataDir = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const DATABASE_URL = process.env.DATABASE_URL || '';
+const PG_MODE = !!DATABASE_URL;
 
-const dbPath = process.env.DB_PATH
-  ? path.isAbsolute(process.env.DB_PATH)
-    ? process.env.DB_PATH
-    : path.resolve(__dirname, '..', process.env.DB_PATH)
-  : path.join(dataDir, 'feedback.db');
-if (!fs.existsSync(path.dirname(dbPath))) fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+let db = null;
+let pool = null;
+let schemaReady = null;
 
-const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
+// Column-name normalization: Postgres folds unquoted identifiers to lowercase,
+// SQLite preserves them. Map lowercase -> canonical camelCase so both modes
+// return identical row objects to the rest of the app.
+const COLUMN_ALIASES = {
+  id: 'id',
+  name: 'name',
+  email: 'email',
+  status: 'status',
+  month: 'month',
+  token: 'token',
+  timestamp: 'timestamp',
+  rating: 'rating',
+  comments: 'comments',
+  suggestions: 'suggestions',
+  sentiment: 'sentiment',
+  summary: 'summary',
+  urgency: 'urgency',
+  highlights: 'highlights',
+  count: 'count',
+  submissionid: 'submissionId',
+  servicetype: 'serviceType',
+  client_id: 'client_id',
+  attendeename: 'attendeeName',
+  attendeemail: 'attendeeEmail',
+  hasvalidemail: 'hasValidEmail',
+  companyname: 'companyName',
+  improvementsuggestions: 'improvementSuggestions',
+  pdfurl: 'pdfUrl',
+  emailsent: 'emailSent',
+  created_at: 'created_at',
+  company_name: 'company_name',
+  service_type: 'service_type',
+  sent_at: 'sent_at',
+  submitted: 'submitted'
+};
 
-db.exec(`
+function normalizeRow(row) {
+  if (!row) return row;
+  const out = {};
+  for (const [key, value] of Object.entries(row)) {
+    out[COLUMN_ALIASES[key.toLowerCase()] || key] = value;
+  }
+  return out;
+}
+
+// ---------- Local mode: better-sqlite3 ----------
+if (!PG_MODE) {
+  const Database = require('better-sqlite3');
+  const dataDir = path.join(__dirname, '..', 'data');
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+  // Vercel serverless: default DB_PATH is unwritable -> fall back to /tmp
+  // (ephemeral! use DATABASE_URL for persistence on Vercel).
+  const dbPath = process.env.DB_PATH
+    ? path.isAbsolute(process.env.DB_PATH)
+      ? process.env.DB_PATH
+      : path.resolve(__dirname, '..', process.env.DB_PATH)
+    : process.env.VERCEL
+      ? '/tmp/feedback.db'
+      : path.join(dataDir, 'feedback.db');
+  if (!fs.existsSync(path.dirname(dbPath))) fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+
+  db = new Database(dbPath);
+  db.pragma('journal_mode = WAL');
+}
+
+// ---------- Remote mode: Postgres (Neon / Supabase / RDS) ----------
+if (PG_MODE) {
+  const { Pool } = require('pg');
+  pool = new Pool({
+    connectionString: DATABASE_URL,
+    max: 5,
+    connectionTimeoutMillis: 5000,
+    idleTimeoutMillis: 30000
+  });
+}
+
+const ID_TYPE = PG_MODE ? 'SERIAL' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+
+const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS feedback_reports (
     submissionId          TEXT PRIMARY KEY,
     timestamp             TEXT NOT NULL,
@@ -36,11 +108,11 @@ db.exec(`
     improvementSuggestions TEXT,
     pdfUrl                TEXT,
     emailSent             INTEGER DEFAULT 0,
-    created_at            TEXT DEFAULT (datetime('now'))
+    created_at            TEXT
   );
 
   CREATE TABLE IF NOT EXISTS clients (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    id             ${ID_TYPE},
     name           TEXT NOT NULL,
     email          TEXT NOT NULL,
     company_name   TEXT,
@@ -50,7 +122,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS feedback_requests (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    id         ${ID_TYPE},
     client_id  INTEGER NOT NULL REFERENCES clients(id),
     month      TEXT NOT NULL,
     token      TEXT NOT NULL UNIQUE,
@@ -58,15 +130,91 @@ db.exec(`
     submitted  INTEGER DEFAULT 0,
     UNIQUE (client_id, month)
   );
-`);
+`;
+
+async function migrateRemote() {
+  const tables = await allRows("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", []);
+  const names = new Set(tables.map((t) => String(t.table_name || t.TABLE_NAME || '').toLowerCase()));
+  if (!names.has('feedback_reports')) return;
+
+  const cols = await allRows("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'", []);
+  const colNames = new Set(cols.map((c) => String(c.column_name || '').toLowerCase()));
+  if (colNames.has('eventname') && !colNames.has('servicetype')) {
+    await run('ALTER TABLE feedback_reports RENAME COLUMN eventname TO servicetype', []);
+  }
+  if (colNames.has('eventdate') && !colNames.has('month')) {
+    await run('ALTER TABLE feedback_reports RENAME COLUMN eventdate TO month', []);
+  }
+  const finalCols = await allRows("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'", []);
+  if (!finalCols.some((c) => String(c.column_name || '').toLowerCase() === 'client_id')) {
+    await run('ALTER TABLE feedback_reports ADD COLUMN client_id INTEGER REFERENCES clients(id)', []);
+  }
+}
+
+function ensureSchema() {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      if (PG_MODE) {
+        await run(SCHEMA_SQL, []);
+        await migrateRemote();
+      } else {
+        db.exec(SCHEMA_SQL);
+        migrateFeedbackReports(db);
+      }
+    })();
+  }
+  return schemaReady;
+}
+
+// Convert ? placeholders to pg's $1..$n (sqlite accepts ? natively).
+function toPg(sql) {
+  let i = 0;
+  return sql.replace(/\?/g, () => `$${++i}`);
+}
+
+async function allRows(sql, args = []) {
+  await ensureSchema();
+  if (PG_MODE) {
+    const result = await pool.query(toPg(sql), args);
+    return result.rows.map(normalizeRow);
+  }
+  return db.prepare(sql).all(...args).map(normalizeRow);
+}
+
+async function getRow(sql, args = []) {
+  await ensureSchema();
+  if (PG_MODE) {
+    const result = await pool.query(toPg(sql), args);
+    return normalizeRow(result.rows[0]);
+  }
+  return normalizeRow(db.prepare(sql).get(...args));
+}
+
+async function run(sql, args = []) {
+  await ensureSchema();
+  if (PG_MODE) {
+    const result = await pool.query(toPg(sql), args);
+    return { changes: result.rowCount };
+  }
+  return db.prepare(sql).run(...args);
+}
+
+async function runReturning(sql, args = []) {
+  await ensureSchema();
+  if (PG_MODE) {
+    const result = await pool.query(toPg(sql), args);
+    return normalizeRow(result.rows[0]);
+  }
+  return normalizeRow(db.prepare(sql).get(...args));
+}
 
 /**
- * Phase 2 migration: renames legacy eventName/eventDate columns to
- * serviceType/month and adds client_id. Idempotent — runs against old
- * schemas only; fresh databases already use the new column names.
+ * Legacy-schema migration for local SQLite databases: renames eventName/
+ * eventDate columns to serviceType/month and adds client_id. Idempotent.
+ * Accepts a better-sqlite3 handle for tests; defaults to the local db.
  */
 function migrateFeedbackReports(dbHandle = db) {
-  const cols = dbHandle.prepare('PRAGMA table_info(feedback_reports)').all().map((c) => c.name);
+  if (!dbHandle || PG_MODE) return;  const cols = dbHandle.prepare('PRAGMA table_info(feedback_reports)').all().map((c) => c.name);
   if (cols.includes('eventName') && !cols.includes('serviceType')) {
     dbHandle.exec('ALTER TABLE feedback_reports RENAME COLUMN eventName TO serviceType');
   }
@@ -79,27 +227,22 @@ function migrateFeedbackReports(dbHandle = db) {
   }
 }
 
-migrateFeedbackReports();
-
-function insertFeedback(row) {
-  const stmt = db.prepare(`
+async function insertFeedback(row) {
+  await run(`
     INSERT INTO feedback_reports (
       submissionId, timestamp, serviceType, month, client_id, attendeeName, attendeeEmail,
       hasValidEmail, companyName, rating, comments, suggestions,
-      sentiment, summary, urgency, highlights, improvementSuggestions, pdfUrl, emailSent
+      sentiment, summary, urgency, highlights, improvementSuggestions, pdfUrl, emailSent, created_at
     ) VALUES (
-      @submissionId, @timestamp, @serviceType, @month, @client_id, @attendeeName, @attendeeEmail,
-      @hasValidEmail, @companyName, @rating, @comments, @suggestions,
-      @sentiment, @summary, @urgency, @highlights, @improvementSuggestions, @pdfUrl, @emailSent
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
     )
-  `);
-  stmt.run({
-    ...row,
-    hasValidEmail: row.hasValidEmail ? 1 : 0,
-    emailSent: row.emailSent ? 1 : 0,
-    highlights: JSON.stringify(row.highlights || []),
-    improvementSuggestions: JSON.stringify(row.improvementSuggestions || [])
-  });
+  `, [
+    row.submissionId, row.timestamp, row.serviceType, row.month ?? null, row.client_id ?? null,
+    row.attendeeName, row.attendeeEmail, row.hasValidEmail ? 1 : 0, row.companyName, row.rating,
+    row.comments, row.suggestions, row.sentiment, row.summary, row.urgency,
+    JSON.stringify(row.highlights || []), JSON.stringify(row.improvementSuggestions || []),
+    row.pdfUrl ?? '', row.emailSent ? 1 : 0, new Date().toISOString()
+  ]);
 }
 
 function rowToRecord(r) {
@@ -121,47 +264,49 @@ function safeJson(value, fallback) {
   }
 }
 
-function queryFeedback({ from, to, sentiment, serviceType, eventName } = {}) {
+async function queryFeedback({ from, to, sentiment, serviceType, eventName } = {}) {
   const where = [];
-  const params = {};
+  const params = [];
   if (from) {
-    where.push('substr(month,1,10) >= @from');
-    params.from = String(from).slice(0, 10);
+    where.push('substr(month,1,10) >= ?');
+    params.push(String(from).slice(0, 10));
   }
   if (to) {
-    where.push('substr(month,1,10) <= @to');
-    params.to = String(to).slice(0, 10);
+    where.push('substr(month,1,10) <= ?');
+    params.push(String(to).slice(0, 10));
   }
   if (sentiment) {
-    where.push('sentiment = @sentiment');
-    params.sentiment = sentiment;
+    where.push('sentiment = ?');
+    params.push(sentiment);
   }
   const service = serviceType || eventName;
   if (service) {
-    where.push('serviceType = @service');
-    params.service = service;
+    where.push('serviceType = ?');
+    params.push(service);
   }
   const sql = `SELECT * FROM feedback_reports ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY timestamp DESC`;
-  return db.prepare(sql).all(params).map(rowToRecord);
+  const rows = await allRows(sql, params);
+  return rows.map(rowToRecord);
 }
 
-function queryFeedbackByMonth({ fromMonth, toMonth } = {}) {
+async function queryFeedbackByMonth({ fromMonth, toMonth } = {}) {
   const where = [];
-  const params = {};
+  const params = [];
   if (fromMonth) {
-    where.push('substr(month,1,7) >= @fromMonth');
-    params.fromMonth = String(fromMonth).slice(0, 7);
+    where.push('substr(month,1,7) >= ?');
+    params.push(String(fromMonth).slice(0, 7));
   }
   if (toMonth) {
-    where.push('substr(month,1,7) <= @toMonth');
-    params.toMonth = String(toMonth).slice(0, 7);
+    where.push('substr(month,1,7) <= ?');
+    params.push(String(toMonth).slice(0, 7));
   }
   const sql = `SELECT * FROM feedback_reports ${where.length ? 'WHERE ' + where.join(' AND ') : ''} ORDER BY timestamp DESC`;
-  return db.prepare(sql).all(params).map(rowToRecord);
+  const rows = await allRows(sql, params);
+  return rows.map(rowToRecord);
 }
 
-function stats({ from, to } = {}) {
-  const rows = queryFeedback({ from, to });
+async function stats({ from, to } = {}) {
+  const rows = await queryFeedback({ from, to });
   const total = rows.length;
   const avgRating = total ? rows.reduce((s, r) => s + r.rating, 0) / total : 0;
   const sentimentCounts = { Positive: 0, Neutral: 0, Negative: 0 };
@@ -185,87 +330,89 @@ function stats({ from, to } = {}) {
 
 // ---------- Clients ----------
 
-function insertClient({ name, email, company_name = '', service_type = '', status = 'active' }) {
-  const stmt = db.prepare(`
+async function insertClient({ name, email, company_name = '', service_type = '', status = 'active' }) {
+  return runReturning(`
     INSERT INTO clients (name, email, company_name, service_type, status, created_at)
-    VALUES (@name, @email, @company_name, @service_type, @status, @created_at)
-  `);
-  const info = stmt.run({
-    name: String(name || '').trim(),
-    email: String(email || '').trim(),
-    company_name: String(company_name || '').trim(),
-    service_type: String(service_type || '').trim(),
-    status: status === 'inactive' ? 'inactive' : 'active',
-    created_at: new Date().toISOString()
-  });
-  return db.prepare('SELECT * FROM clients WHERE id = ?').get(info.lastInsertRowid);
+    VALUES (?, ?, ?, ?, ?, ?)
+    RETURNING *
+  `, [
+    String(name || '').trim(),
+    String(email || '').trim(),
+    String(company_name || '').trim(),
+    String(service_type || '').trim(),
+    status === 'inactive' ? 'inactive' : 'active',
+    new Date().toISOString()
+  ]);
 }
 
-function getClient(id) {
-  return db.prepare('SELECT * FROM clients WHERE id = ?').get(id);
+async function getClient(id) {
+  return getRow('SELECT * FROM clients WHERE id = ?', [id]);
 }
 
-function listActiveClients() {
-  return db.prepare("SELECT * FROM clients WHERE status = 'active' ORDER BY id").all();
+async function listActiveClients() {
+  return allRows("SELECT * FROM clients WHERE status = 'active' ORDER BY id", []);
 }
 
-function listClients() {
-  return db.prepare('SELECT * FROM clients ORDER BY id DESC').all();
+async function listClients() {
+  return allRows('SELECT * FROM clients ORDER BY id DESC', []);
 }
 
-function listClientEmails() {
-  return db.prepare('SELECT lower(email) AS email FROM clients').all().map((r) => r.email);
+async function listClientEmails() {
+  const rows = await allRows('SELECT lower(email) AS email FROM clients', []);
+  return rows.map((r) => r.email);
 }
 
-function updateClientStatus(id, status) {
-  const info = db.prepare('UPDATE clients SET status = @status WHERE id = @id').run({ id, status });
-  if (!info.changes) return null;
-  return getClient(id);
+async function updateClientStatus(id, status) {
+  const row = await runReturning('UPDATE clients SET status = ? WHERE id = ? RETURNING *', [status, id]);
+  return row || null;
 }
 
-function upsertClientByEmail({ name, email, company_name = '', service_type = '', status = 'active' }) {
-  const existing = db.prepare('SELECT * FROM clients WHERE lower(email) = lower(?)').get(email);
+async function upsertClientByEmail({ name, email, company_name = '', service_type = '', status = 'active' }) {
+  const existing = await getRow('SELECT * FROM clients WHERE lower(email) = lower(?)', [email]);
   if (existing) {
-    db.prepare('UPDATE clients SET name = @name, company_name = @company_name, service_type = @service_type, status = @status WHERE id = @id')
-      .run({ id: existing.id, name, email, company_name, service_type, status });
-    return { action: 'updated', row: getClient(existing.id) };
+    const row = await runReturning(
+      'UPDATE clients SET name = ?, company_name = ?, service_type = ?, status = ? WHERE id = ? RETURNING *',
+      [name, company_name, service_type, status, existing.id]
+    );
+    return { action: 'updated', row };
   }
-  return { action: 'inserted', row: insertClient({ name, email, company_name, service_type, status }) };
+  return { action: 'inserted', row: await insertClient({ name, email, company_name, service_type, status }) };
 }
 
-function deleteClient(id) {
-  const removedRequests = db.prepare('DELETE FROM feedback_requests WHERE client_id = ?').run(id).changes;
-  const info = db.prepare('DELETE FROM clients WHERE id = ?').run(id);
-  return { deleted: info.changes > 0, removedRequests };
+async function deleteClient(id) {
+  const info = await run('DELETE FROM feedback_requests WHERE client_id = ?', [id]);
+  const removedRequests = info.changes;
+  const deletedInfo = await run('DELETE FROM clients WHERE id = ?', [id]);
+  return { deleted: deletedInfo.changes > 0, removedRequests };
 }
 
 // ---------- Feedback requests (monthly token sends) ----------
 
-function insertFeedbackRequest({ client_id, month, token }) {
-  const existing = db.prepare('SELECT * FROM feedback_requests WHERE client_id = ? AND month = ?')
-    .get(client_id, String(month).slice(0, 7));
+async function insertFeedbackRequest({ client_id, month, token }) {
+  const monthKey = String(month).slice(0, 7);
+  const existing = await getRow('SELECT * FROM feedback_requests WHERE client_id = ? AND month = ?', [client_id, monthKey]);
   if (existing) return { created: false, row: existing };
 
-  const stmt = db.prepare(`
+  const row = await runReturning(`
     INSERT INTO feedback_requests (client_id, month, token, sent_at, submitted)
-    VALUES (@client_id, @month, @token, @sent_at, 0)
-  `);
-  const info = stmt.run({
-    client_id,
-    month: String(month).slice(0, 7),
-    token: String(token),
-    sent_at: new Date().toISOString()
-  });
-  return { created: true, row: db.prepare('SELECT * FROM feedback_requests WHERE id = ?').get(info.lastInsertRowid) };
+    VALUES (?, ?, ?, ?, 0)
+    RETURNING *
+  `, [client_id, monthKey, String(token), new Date().toISOString()]);
+  return { created: true, row };
 }
 
-function findFeedbackRequestByToken(token) {
-  return db.prepare('SELECT * FROM feedback_requests WHERE token = ?').get(String(token || ''));
+async function findFeedbackRequestByToken(token) {
+  return getRow('SELECT * FROM feedback_requests WHERE token = ?', [String(token || '')]);
 }
 
-function markFeedbackRequestSubmitted(id) {
-  return db.prepare('UPDATE feedback_requests SET submitted = 1 WHERE id = ?').run(id).changes > 0;
+async function markFeedbackRequestSubmitted(id) {
+  const info = await run('UPDATE feedback_requests SET submitted = 1 WHERE id = ?', [id]);
+  return info.changes > 0;
 }
+
+// Eager schema setup at module load (synchronous for local SQLite; the
+// resolved promise is shared with every subsequent query).
+ensureSchema();
 
 module.exports = {
   db,

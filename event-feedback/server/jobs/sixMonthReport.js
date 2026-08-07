@@ -70,7 +70,7 @@ async function analyzeLarge(feedbackRows, { apiKey } = {}) {
  */
 async function generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml } = {}) {
   const { fromMonth, toMonth } = sixMonthRange();
-  const rows = queryFeedbackByMonth({ fromMonth, toMonth });
+  const rows = await queryFeedbackByMonth({ fromMonth, toMonth });
 
   if (!rows.length) {
     console.log(`[SixMonthReport] No feedback received ${fromMonth} to ${toMonth}; sending notice`);

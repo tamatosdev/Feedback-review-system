@@ -63,6 +63,16 @@ SQLite database `data/feedback.db`, table `feedback_reports` with: `submissionId
 
 To start fresh: stop the server, delete `data/feedback.db`, restart.
 
+## Deploying to Vercel
+
+This is a normal Express app that also runs as a Vercel serverless function:
+
+- `vercel.json` rewrites every path to the `api/index.js` function (which exports the Express app). No static-only 404s.
+- **Set `DATABASE_URL`** (Postgres — Neon/Supabase) in the Vercel dashboard. SQLite files don't persist on serverless; without `DATABASE_URL` the app falls back to an ephemeral `/tmp` SQLite database (fine for smoke tests, data resets).
+- Set all the same secrets as `.env` in the Vercel dashboard: `GEMINI_API_KEY`, `SMTP_*`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SYNC_SECRET`, `ADMIN_EMAIL`, `PUBLIC_URL` (your live domain), `CRON_SECRET`.
+- `node-cron` jobs are disabled in serverless mode — trigger `/api/cron/*` with Vercel Cron (add `x-cron-secret` if `CRON_SECRET` is set), or run them on a persistent server.
+- Local dev keeps working as before (SQLite via `DB_PATH`).
+
 ## Tests
 
 ```bash

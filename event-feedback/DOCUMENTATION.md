@@ -693,6 +693,18 @@ Runs Node's built-in test runner against `server/tests/*.test.js` (`cleanData.te
 
 ---
 
+## 21. Deploying to Vercel
+
+The app is a normal long-running Express server **and** a Vercel serverless function:
+
+- `vercel.json` rewrites all paths (`/(.*)` → `/api`) into the `api/index.js` function, which simply exports the Express app (`server/index.js`). Without it, Vercel serves static files only and every `/api/*` request returns its HTML 404 page ("The page c…" — the exact symptom seen in the Google Sheets sync failure).
+- `server/index.js` guards `app.listen()` and `node-cron` with `require.main === module`, so the function only handles requests; cron runs only in long-running mode. Use **Vercel Cron** (or an external cron) hitting `POST /api/cron/monthly-send` and `POST /api/cron/six-month-report` with `x-cron-secret` if `CRON_SECRET` is set.
+- **Database:** SQLite cannot persist on serverless (ephemeral FS; `/tmp` fallback is used when `VERCEL` and no `DB_PATH`). For production set `DATABASE_URL` (Postgres — e.g. Neon/Supabase); `server/db.js` then runs in Postgres mode (same row shapes — column names are normalized), otherwise it uses local `better-sqlite3`.
+- The `reports/` folder is not writable on Vercel — saving HTML/PDFs degrades gracefully (warn + continue); emails still attach the PDF generated in-memory.
+- Every env var must be added in the Vercel dashboard (Vercel does not read the local `.env`): `GEMINI_API_KEY`, `GEMINI_MODEL`, `SMTP_*`, `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SYNC_SECRET`, `DATABASE_URL`, `PUBLIC_URL`/`APP_BASE_URL` (live domain), `CRON_SECRET`.
+
+---
+
 ## 21. Deployment Notes
 
 - Set `PUBLIC_URL` / `APP_BASE_URL` to the real domain so links inside emails resolve.

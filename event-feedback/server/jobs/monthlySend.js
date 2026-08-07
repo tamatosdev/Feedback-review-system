@@ -16,7 +16,7 @@ function currentMonth(now = new Date()) {
 async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl } = {}) {
   const month = currentMonth();
   const base = String(appBaseUrl || 'http://localhost:3000').replace(/\/$/, '');
-  const clients = listActiveClients();
+  const clients = await listActiveClients();
 
   let sent = 0;
   let skipped = 0;
@@ -30,7 +30,7 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl } = {}) {
     }
 
     const token = crypto.randomUUID();
-    const { created } = insertFeedbackRequest({ client_id: client.id, month, token });
+    const { created } = await insertFeedbackRequest({ client_id: client.id, month, token });
     if (!created) {
       skipped++;
       console.log(`[MonthlySend] Skipped client ${client.id}: feedback request for ${month} already sent`);
