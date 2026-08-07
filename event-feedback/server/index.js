@@ -89,6 +89,9 @@ function verifySession(token) {
 
 function requireAdminSession(req, res, next) {
   if (!ADMIN_AUTH_ENABLED) return next();
+  // The Google Sheets sync endpoint is public-but-secret-gated
+  // (X-Sync-Secret); it must not be shadowed by the admin session gate.
+  if (req.path === '/sync') return next();
   if (verifySession(parseCookies(req)[SESSION_COOKIE])) return next();
   if (req.originalUrl.split('?')[0].endsWith('.html')) {
     return res.redirect('/login.html');
