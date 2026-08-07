@@ -199,17 +199,26 @@ function dbMode() {
   return PG_MODE ? 'postgres' : 'sqlite';
 }
 
+function dbHost() {
+  if (!PG_MODE) return null;
+  try {
+    return new URL(DATABASE_URL).hostname;
+  } catch {
+    return 'unparsable';
+  }
+}
+
 async function pingDb() {
   try {
     await ensureSchema();
     if (PG_MODE) {
       await pool.query('SELECT 1');
-      return { mode: 'postgres', ok: true };
+      return { mode: 'postgres', ok: true, host: dbHost() };
     }
     db.prepare('SELECT 1').get();
     return { mode: 'sqlite', ok: true };
   } catch (err) {
-    throw new Error(`Database error (${err.code || 'unknown'}): ${err.message || 'see server logs'}`);
+    throw new Error(`Database error (${err.code || 'unknown'}): ${err.message || 'see server logs'} (host: ${dbHost() || 'n/a'})`);
   }
 }
 
@@ -465,6 +474,7 @@ ensureSchema();
 module.exports = {
   db,
   dbMode,
+  dbHost,
   pingDb,
   migrateFeedbackReports,
   insertFeedback,
