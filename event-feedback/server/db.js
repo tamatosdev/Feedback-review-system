@@ -90,12 +90,18 @@ if (!PG_MODE) {
 // ---------- Remote mode: Postgres (Neon / Supabase / RDS) ----------
 if (PG_MODE) {
   const { Pool } = require('pg');
+  const sslMode = /sslmode=([^&]+)/.exec(DATABASE_URL)?.[1];
+  const isLocalHost = /localhost|127\.0\.0\.1/.test(DATABASE_URL);
+  const ssl = sslMode ? sslMode === 'disable' ? false : { rejectUnauthorized: false }
+    : isLocalHost ? false : { rejectUnauthorized: false };
   pool = new Pool({
     connectionString: DATABASE_URL,
+    ssl,
     max: 5,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 10000,
     idleTimeoutMillis: 30000
   });
+  pool.on('error', (err) => console.error('[db] Postgres pool error:', err.message));
 }
 
 const ID_TYPE = PG_MODE ? 'SERIAL' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
@@ -146,21 +152,21 @@ const SCHEMA_SQL = `
 `;
 
 async function migrateRemote() {
-  const tables = await allRows("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'", []);
-  const names = new Set(tables.map((t) => String(t.table_name || t.TABLE_NAME || '').toLowerCase()));
+  const tables = await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
+  const names = new Set(tables.rows.map((t) => String(t.table_name || '').toLowerCase()));
   if (!names.has('feedback_reports')) return;
 
-  const cols = await allRows("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'", []);
-  const colNames = new Set(cols.map((c) => String(c.column_name || '').toLowerCase()));
+  const cols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'");
+  const colNames = new Set(cols.rows.map((c) => String(c.column_name || '').toLowerCase()));
   if (colNames.has('eventname') && !colNames.has('servicetype')) {
-    await run('ALTER TABLE feedback_reports RENAME COLUMN eventname TO servicetype', []);
+    await pool.query('ALTER TABLE feedback_reports RENAME COLUMN eventname TO servicetype');
   }
   if (colNames.has('eventdate') && !colNames.has('month')) {
-    await run('ALTER TABLE feedback_reports RENAME COLUMN eventdate TO month', []);
+    await pool.query('ALTER TABLE feedback_reports RENAME COLUMN eventdate TO month');
   }
-  const finalCols = await allRows("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'", []);
-  if (!finalCols.some((c) => String(c.column_name || '').toLowerCase() === 'client_id')) {
-    await run('ALTER TABLE feedback_reports ADD COLUMN client_id INTEGER REFERENCES clients(id)', []);
+  const finalCols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'");
+  if (!finalCols.rows.some((c) => String(c.column_name || '').toLowerCase() === 'client_id')) {
+    await pool.query('ALTER TABLE feedback_reports ADD COLUMN client_id INTEGER REFERENCES clients(id)');
   }
 }
 
@@ -168,15 +174,43 @@ function ensureSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
       if (PG_MODE) {
-        await run(SCHEMA_SQL, []);
+        // Schema init talks to the pool directly — never through run()/
+        // allRows(), which await ensureSchema() (that would be a circular
+        // await on the in-flight promise).
+        await pool.query(SCHEMA_SQL);
         await migrateRemote();
       } else {
         db.exec(SCHEMA_SQL);
         migrateFeedbackReports(db);
       }
     })();
+    schemaReady.catch((err) => {
+      // Never let an async schema failure crash the process (unhandled
+      // rejection kills the function on Vercel); reset so the next request
+      // retries and returns a proper JSON error instead of a crash page.
+      console.error('[db] schema init failed:', err.code || err.message || err);
+      schemaReady = null;
+    });
   }
   return schemaReady;
+}
+
+function dbMode() {
+  return PG_MODE ? 'postgres' : 'sqlite';
+}
+
+async function pingDb() {
+  try {
+    await ensureSchema();
+    if (PG_MODE) {
+      await pool.query('SELECT 1');
+      return { mode: 'postgres', ok: true };
+    }
+    db.prepare('SELECT 1').get();
+    return { mode: 'sqlite', ok: true };
+  } catch (err) {
+    throw new Error(`Database error (${err.code || 'unknown'}): ${err.message || 'see server logs'}`);
+  }
 }
 
 // Convert ? placeholders to pg's $1..$n (sqlite accepts ? natively).
@@ -424,11 +458,14 @@ async function markFeedbackRequestSubmitted(id) {
 }
 
 // Eager schema setup at module load (synchronous for local SQLite; the
-// resolved promise is shared with every subsequent query).
+// resolved promise is shared with every subsequent query). Failures are
+// caught and retried per-request — they never crash the process.
 ensureSchema();
 
 module.exports = {
   db,
+  dbMode,
+  pingDb,
   migrateFeedbackReports,
   insertFeedback,
   queryFeedback,

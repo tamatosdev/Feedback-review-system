@@ -9,7 +9,7 @@ const { analyzeFeedback, analyzeCombined, sentimentColor } = require('./gemini')
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, queryFeedback, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient } = require('./db');
+const { insertFeedback, queryFeedback, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, pingDb } = require('./db');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
 
@@ -846,7 +846,14 @@ app.post('/api/cron/six-month-report', requireCronSecret, async (req, res) => {
   }
 });
 
-app.get('/api/health', (req, res) => res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass }));
+app.get('/api/health', async (req, res) => {
+  try {
+    const db = await pingDb();
+    res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass, db });
+  } catch (err) {
+    res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass, db: { mode: dbMode(), ok: false, error: err.message } });
+  }
+});
 
 // Vercel serverless: the app is exported and never started here; the
 // /api/cron/* endpoints can still be triggered externally (cron scheduling
