@@ -106,8 +106,28 @@ if (PG_MODE) {
 
 const ID_TYPE = PG_MODE ? 'SERIAL' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
 
-const SCHEMA_SQL = `
-  CREATE TABLE IF NOT EXISTS feedback_reports (
+// Dependency order matters for Postgres: FKs can only reference tables that
+// already exist at CREATE time (SQLite is lenient, Postgres is not).
+const SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS clients (
+    id             ${ID_TYPE},
+    name           TEXT NOT NULL,
+    email          TEXT NOT NULL,
+    company_name   TEXT,
+    service_type   TEXT,
+    status         TEXT NOT NULL DEFAULT 'active',
+    created_at     TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS feedback_requests (
+    id         ${ID_TYPE},
+    client_id  INTEGER NOT NULL REFERENCES clients(id),
+    month      TEXT NOT NULL,
+    token      TEXT NOT NULL UNIQUE,
+    sent_at    TEXT,
+    submitted  INTEGER DEFAULT 0,
+    UNIQUE (client_id, month)
+  )`,
+  `CREATE TABLE IF NOT EXISTS feedback_reports (
     submissionId          TEXT PRIMARY KEY,
     timestamp             TEXT NOT NULL,
     serviceType           TEXT NOT NULL,
@@ -128,28 +148,8 @@ const SCHEMA_SQL = `
     pdfUrl                TEXT,
     emailSent             INTEGER DEFAULT 0,
     created_at            TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS clients (
-    id             ${ID_TYPE},
-    name           TEXT NOT NULL,
-    email          TEXT NOT NULL,
-    company_name   TEXT,
-    service_type   TEXT,
-    status         TEXT NOT NULL DEFAULT 'active',
-    created_at     TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS feedback_requests (
-    id         ${ID_TYPE},
-    client_id  INTEGER NOT NULL REFERENCES clients(id),
-    month      TEXT NOT NULL,
-    token      TEXT NOT NULL UNIQUE,
-    sent_at    TEXT,
-    submitted  INTEGER DEFAULT 0,
-    UNIQUE (client_id, month)
-  );
-`;
+  )`
+];
 
 async function migrateRemote() {
   const tables = await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'");
@@ -176,11 +176,14 @@ function ensureSchema() {
       if (PG_MODE) {
         // Schema init talks to the pool directly — never through run()/
         // allRows(), which await ensureSchema() (that would be a circular
-        // await on the in-flight promise).
-        await pool.query(SCHEMA_SQL);
+        // await on the in-flight promise). Each statement runs separately
+        // so a failure in one doesn't roll back the others.
+        for (const stmt of SCHEMA_STATEMENTS) {
+          await pool.query(stmt);
+        }
         await migrateRemote();
       } else {
-        db.exec(SCHEMA_SQL);
+        db.exec(SCHEMA_STATEMENTS.join(';\n'));
         migrateFeedbackReports(db);
       }
     })();
@@ -220,6 +223,15 @@ async function pingDb() {
   } catch (err) {
     throw new Error(`Database error (${err.code || 'unknown'}): ${err.message || 'see server logs'} (host: ${dbHost() || 'n/a'})`);
   }
+}
+
+async function listTables() {
+  if (PG_MODE) {
+    const r = await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name");
+    return r.rows.map((row) => row.table_name);
+  }
+  const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all();
+  return rows.map((r) => r.name);
 }
 
 // Convert ? placeholders to pg's $1..$n (sqlite accepts ? natively).
@@ -476,6 +488,7 @@ module.exports = {
   dbMode,
   dbHost,
   pingDb,
+  listTables,
   migrateFeedbackReports,
   insertFeedback,
   queryFeedback,

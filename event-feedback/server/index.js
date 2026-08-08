@@ -9,7 +9,7 @@ const { analyzeFeedback, analyzeCombined, sentimentColor } = require('./gemini')
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, queryFeedback, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, pingDb } = require('./db');
+const { insertFeedback, queryFeedback, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
 
@@ -852,9 +852,13 @@ app.post('/api/cron/six-month-report', requireCronSecret, async (req, res) => {
 app.get('/api/health', async (req, res) => {
   try {
     const db = await pingDb();
-    res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass, db });
+    let tables = null;
+    if (db.ok) {
+      try { tables = await listTables(); } catch (err) { tables = `unavailable (${err.code || err.message})`; }
+    }
+    res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass, db: { ...db, tables } });
   } catch (err) {
-    res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass, db: { mode: dbMode(), ok: false, error: err.message } });
+    res.json({ ok: true, geminiConfigured: !!geminiApiKey, smtpConfigured: !!smtpConfig.smtpPass, db: { mode: dbMode(), ok: false, host: dbHost(), error: err.message, tables: null } });
   }
 });
 
