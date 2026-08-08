@@ -378,6 +378,11 @@ async function queryFeedback({ from, to, sentiment, serviceType, eventName } = {
   return rows.map(rowToRecord);
 }
 
+async function getFeedbackReport(submissionId) {
+  const row = await getRow('SELECT * FROM feedback_reports WHERE submissionId = ?', [String(submissionId || '')]);
+  return row ? rowToRecord(row) : null;
+}
+
 async function queryFeedbackByMonth({ fromMonth, toMonth } = {}) {
   const where = [];
   const params = [];
@@ -514,6 +519,7 @@ module.exports = {
   insertFeedback,
   queryFeedback,
   queryFeedbackByMonth,
+  getFeedbackReport,
   stats,
   rowToRecord,
   insertClient,

@@ -156,6 +156,7 @@ event-feedback/
 │   ├── pdf.js            # PDFKit renderers (single + combined)
 │   ├── email.js          # Nodemailer transports + email bodies (admin + client)
 │   ├── db.js             # SQLite connection, schema, migration, queries, stats, clients/requests CRUD
+│   ├── storage.js        # Report storage driver: disk | supabase | memory (+ on-demand regen)
 │   ├── jobs/
 │   │   ├── monthlySend.js    # Cron 1: email feedback links to active clients (tokenized)
 │   │   └── sixMonthReport.js # Cron 2: 6-month combined trend report (+ chunked map-reduce)
@@ -169,7 +170,7 @@ event-feedback/
 │   ├── admin-clients.html # Internal client management page (admin session required)
 │   ├── login.html         # Admin sign-in page (session login)
 │   └── assets/logo.png   # Official logo (form, dashboard, reports, PDFs)
-├── reports/              # Generated HTML + PDF files (served at /reports/…)
+├── reports/              # Generated HTML + PDF files (local dev, disk driver only)
 ├── data/                 # SQLite database (feedback.db)
 ├── .env                  # Secrets (never committed)
 ├── .env.example
@@ -200,6 +201,10 @@ Copy `.env.example` → `.env` and fill in. **Never commit `.env`.**
 | `SIX_MONTH_REPORT_CRON` | Cron expression for the 6-month report | `0 9 1 1,7 *` |
 | `CRON_SECRET` | Optional secret for external cron-trigger endpoints (`x-cron-secret` header) | *(empty → no auth check)* |
 | `ADMIN_USERNAME` | Admin login username (single fixed account — no registration) | *(empty → auth disabled + startup warning)* |
+| `SUPABASE_URL` | Supabase project URL — with `SUPABASE_SERVICE_ROLE_KEY` enables the `supabase` storage driver | *(empty → driver auto-detected)* |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (storage uploads; keep secret) | *(empty → driver auto-detected)* |
+| `SUPABASE_REPORTS_BUCKET` | Storage bucket name for generated reports | `reports` |
+| `STORAGE_DRIVER` | Force a report storage driver: `disk`, `supabase`, or `memory` | *(auto-detect)* |
 | `ADMIN_PASSWORD` | Admin login password (single fixed account — no registration) | *(empty → auth disabled + startup warning)* |
 | `SESSION_SECRET` | Random secret that signs the admin session cookie (HMAC-SHA256) | *(empty → auth disabled + startup warning)* |
 | `SYNC_SECRET` | Static secret for the Google Sheets sync endpoint (`X-Sync-Secret` header, `POST /api/clients/sync`) | *(empty → sync endpoint rejects all requests — fail closed)* |
@@ -298,8 +303,8 @@ Receives raw form JSON, then orchestrates the whole pipeline:
 1. `cleanData(raw)` → `cleanedData` (Section 9).
 2. `analyzeFeedback(cleanedData)` → Gemini analysis (Section 10), or fallback when no API key / on failure.
 3. `sentimentColor(sentiment)` → badge colors for display.
-4. `reportHTML(record)` → branded HTML, saved to `reports/<submissionId>.html`.
-5. `buildPdf(record)` → branded PDF, saved to `reports/<submissionId>.pdf`; `pdfUrl` built from `PUBLIC_URL`.
+4. `reportHTML(record)` → branded HTML, saved via the storage driver (Section 18) — `reports/<submissionId>.html` locally.
+5. `buildPdf(record)` → branded PDF via the storage driver; `pdfUrl` is the storage URL (or `/reports/<file>` fallback that regenerates on demand).
 6. `sendFeedbackEmail(...)` → SMTP email to admin with PDF attached and link (skipped if no `SMTP_PASS`; failure logged, not fatal).
 7. `insertFeedback(record)` → row stored in `feedback_reports` **even if email/AI failed**.
 
@@ -405,6 +410,18 @@ Implemented in `server/pdf.js` using **PDFKit** (not puppeteer — no headless b
 - Single report sections: service info, attendee info, rating stars, sentiment badge, AI summary, highlights, improvement suggestions, original comments, timestamp & submission ID.
 - Combined report: one section per submission plus the aggregate analysis.
 - Output files land in `reports/` and are served at `/reports/<file>`.
+
+### 11.1 Report storage drivers (`server/storage.js`)
+
+HTML/PDF files never *require* local disk. `server/storage.js` exposes `saveReport`, `getReport`, `reportUrl`, and `fallbackReportUrl` behind a pluggable driver:
+
+| Driver | When used | Behavior |
+|---|---|---|
+| `disk` | local dev (default without `VERCEL`) | Writes to `reports/` exactly as before; `/reports/<file>` serves from disk |
+| `supabase` | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` set | Uploads to the `SUPABASE_REPORTS_BUCKET` bucket (public); `pdfUrl` becomes the direct storage object URL |
+| `memory` | `VERCEL` set without Supabase credentials | Nothing is written; `pdfUrl` falls back to `/reports/<file>`, and every `/reports/<file>` request that isn't found (or was never saved) is **regenerated on demand** from the database (`getFeedbackReport` for single reports, `queryFeedback` + `analyzeCombined` for `combined-<from>-to-<to>` files) |
+
+`STORAGE_DRIVER=disk|supabase|memory` forces a driver. If a save fails (e.g. readonly FS), the submission still succeeds: the PDF is emailed as an in-memory attachment and `pdfUrl` falls back to the regenerating `/reports/<file>` link.
 
 ---
 
@@ -548,7 +565,7 @@ The same logic is exposed for external schedulers at `POST /api/cron/monthly-sen
 ```js
 // 09:00 on the 1st of January and July (every 6 months)
 cron.schedule(process.env.SIX_MONTH_REPORT_CRON || '0 9 1 1,7 *', async () => {
-  await generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml });
+  await generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml, fallbackReportUrl });
 });
 ```
 
@@ -657,7 +674,7 @@ The public feedback form (`/`, `POST /api/feedback`, `GET /feedback/<token>`) is
 | `GET` | `/feedback/<token>` | Token-validated feedback form (pre-filled; invalid/already-used → friendly page) — **open, no auth** |
 | `POST` | `/api/cron/monthly-send` | External cron trigger for the monthly send (requires `x-cron-secret` if `CRON_SECRET` set; admin session) |
 | `POST` | `/api/cron/six-month-report` | External cron trigger for the 6-month report (requires `x-cron-secret` if `CRON_SECRET` set; admin session) |
-| `GET` | `/reports/<file>` | Served generated HTML/PDF files |
+| `GET` | `/reports/<file>` | Served generated HTML/PDF files — from the storage driver if saved, otherwise regenerated on demand from the database (single or `combined-<from>-to-<to>` files) |
 | `GET` | `/` | Public feedback form — **open, no auth** |
 | `GET` | `/login.html` | Admin sign-in page — open (only renders; APIs stay locked) |
 | `GET` | `/dashboard.html`, `/admin-clients.html` | Dashboard, internal client management — **redirect to `/login.html` without a valid session** |
@@ -700,15 +717,15 @@ The app is a normal long-running Express server **and** a Vercel serverless func
 - `vercel.json` rewrites all paths (`/(.*)` → `/api`) into the `api/index.js` function, which simply exports the Express app (`server/index.js`). Without it, Vercel serves static files only and every `/api/*` request returns its HTML 404 page ("The page c…" — the exact symptom seen in the Google Sheets sync failure).
 - `server/index.js` guards `app.listen()` and `node-cron` with `require.main === module`, so the function only handles requests; cron runs only in long-running mode. Use **Vercel Cron** (or an external cron) hitting `POST /api/cron/monthly-send` and `POST /api/cron/six-month-report` with `x-cron-secret` if `CRON_SECRET` is set.
 - **Database:** SQLite cannot persist on serverless (ephemeral FS; `/tmp` fallback is used when `VERCEL` and no `DB_PATH`). For production set `DATABASE_URL` (Postgres — e.g. Neon/Supabase); `server/db.js` then runs in Postgres mode (same row shapes — column names are normalized), otherwise it uses local `better-sqlite3`.
-- The `reports/` folder is not writable on Vercel — saving HTML/PDFs degrades gracefully (warn + continue); emails still attach the PDF generated in-memory.
-- Every env var must be added in the Vercel dashboard (Vercel does not read the local `.env`): `GEMINI_API_KEY`, `GEMINI_MODEL`, `SMTP_*`, `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SYNC_SECRET`, `DATABASE_URL`, `PUBLIC_URL`/`APP_BASE_URL` (live domain), `CRON_SECRET`.
+- **Reports:** the serverless filesystem is not writable, so `server/storage.js` picks a driver per environment — `disk` (local dev), `supabase` (when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set), or `memory` (Vercel without storage credentials — nothing is written, and `/reports/<file>` regenerates the HTML/PDF on demand from the database). Storage failures never fail a submission — the PDF is always emailed as an in-memory attachment and `pdfUrl` falls back to `/reports/<file>`.
+- Every env var must be added in the Vercel dashboard (Vercel does not read the local `.env`): `GEMINI_API_KEY`, `GEMINI_MODEL`, `SMTP_*`, `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SYNC_SECRET`, `DATABASE_URL`, `PUBLIC_URL`/`APP_BASE_URL` (live domain), `CRON_SECRET`, and optionally `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_REPORTS_BUCKET` (report files on Supabase Storage).
 
 ---
 
 ## 21. Deployment Notes
 
 - Set `PUBLIC_URL` / `APP_BASE_URL` to the real domain so links inside emails resolve.
-- `reports/` is local storage — on a VPS, point it at object storage, or rely on the PDF attachment (already attached) instead of the link.
+- `reports/` is only written locally (disk driver). In production, links resolve from Supabase Storage (if configured) or regenerate on demand via `/reports/<file>` — no local disk needed. See Section 11.1 (report storage).
 - Sample rows may exist in `data/feedback.db` from local testing — delete the file to start fresh (the Phase 2 migration only runs if the table still has the old column names).
 - Keep `.env` out of version control; rotate `SMTP_PASS`/`GEMINI_API_KEY`/`ADMIN_PASSWORD`/`SESSION_SECRET` if leaked.
 - **Set `ADMIN_USERNAME`, `ADMIN_PASSWORD`, and `SESSION_SECRET` before deploying** — dashboard, client admin page, and admin APIs are protected by session login. Without all three the app starts but logs a warning that admin routes are unprotected. Sessions are 24h httpOnly signed cookies; if stronger security is needed later, replace the fixed account with per-user auth.
@@ -723,6 +740,6 @@ The app is a normal long-running Express server **and** a Vercel serverless func
 - **Per-service-type breakdown** inside the 6-month report.
 - **Per-user admin accounts / role-based access** (currently a single fixed admin login).
 - **Client opt-out / unsubscribe** mechanism (link-level preference stored in `clients`).
-- **Cloud storage** for PDFs (e.g. S3) instead of local disk.
+- **Additional storage backends** for reports (e.g. S3) behind the `storage.js` driver interface (Supabase Storage + on-demand regeneration already supported).
 - **Read receipts / response-rate metrics** per monthly cycle from `feedback_requests`.
 - **Email templates** (HTML branding) for both client and admin emails.

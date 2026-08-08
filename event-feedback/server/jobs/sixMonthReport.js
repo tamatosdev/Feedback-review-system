@@ -68,7 +68,7 @@ async function analyzeLarge(feedbackRows, { apiKey } = {}) {
  * Cron job (default: 09:00 on Jan 1 and Jul 1). Summarizes all feedback
  * from the last 6 months into a combined trend report and emails the admin.
  */
-async function generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml } = {}) {
+async function generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml, fallbackReportUrl } = {}) {
   const { fromMonth, toMonth } = sixMonthRange();
   const rows = await queryFeedbackByMonth({ fromMonth, toMonth });
 
@@ -97,12 +97,12 @@ async function generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, sav
   const meta = { from: fromMonth, to: toMonth, generatedAt: new Date().toISOString(), ...overall };
 
   const html = combinedHTML(meta, rows, '/assets/logo.png');
-  saveHtml(html, `combined-${fromMonth}-to-${toMonth}.html`);
+  await saveHtml(html, `combined-${fromMonth}-to-${toMonth}.html`);
 
   const pdfBuffer = await buildCombinedPdf(meta, rows);
   const pdfFileName = `combined-${fromMonth}-to-${toMonth}.pdf`;
-  const saved = savePdf(pdfBuffer, pdfFileName);
-  const pdfUrl = reportUrl(pdfFileName);
+  const saved = await savePdf(pdfBuffer, pdfFileName);
+  const pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
 
   let emailSent = false;
   let emailError = null;

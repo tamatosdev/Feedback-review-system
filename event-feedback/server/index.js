@@ -1,6 +1,5 @@
 require('dotenv').config();
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
 const express = require('express');
 const cron = require('node-cron');
@@ -9,7 +8,8 @@ const { analyzeFeedback, analyzeCombined, sentimentColor } = require('./gemini')
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, queryFeedback, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { insertFeedback, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
 
@@ -19,13 +19,6 @@ app.use(express.json({ limit: '2mb' }));
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 const APP_BASE_URL = (process.env.APP_BASE_URL || PUBLIC_URL).replace(/\/$/, '');
-
-const reportsDir = path.join(__dirname, '..', 'reports');
-try {
-  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
-} catch (err) {
-  console.warn('[Vercel] reports dir not writable, generated files will be skipped:', err.message);
-}
 
 const smtpConfig = {
   smtpHost: process.env.SMTP_HOST || 'smtp.hostinger.com',
@@ -131,20 +124,26 @@ app.use('/api/reports/combined', requireAdminSession);
 app.use('/api/cron', requireAdminSession);
 app.get('/api/feedback', requireAdminSession);
 
-function reportUrl(fileName) {
-  return `${PUBLIC_URL}/reports/${encodeURIComponent(fileName)}`;
+function reportUrlFor(fileName) {
+  return reportUrl(fileName);
 }
 
-function savePdf(buffer, fileName) {
-  const filePath = path.join(reportsDir, fileName);
-  fs.writeFileSync(filePath, buffer);
-  return { fileName, filePath, size: buffer.length };
+async function savePdf(buffer, fileName) {
+  try {
+    return await saveReport(fileName, buffer, 'application/pdf');
+  } catch (err) {
+    console.error('[storage] PDF save failed, using on-demand /reports fallback:', err.message);
+    return { size: buffer.length, fallback: true };
+  }
 }
 
-function saveHtml(html, fileName) {
-  const filePath = path.join(reportsDir, fileName);
-  fs.writeFileSync(filePath, html);
-  return filePath;
+async function saveHtml(html, fileName) {
+  try {
+    return await saveReport(fileName, Buffer.from(html), 'text/html; charset=utf-8');
+  } catch (err) {
+    console.error('[storage] HTML save failed, using on-demand /reports fallback:', err.message);
+    return { size: Buffer.byteLength(html), fallback: true };
+  }
 }
 
 // ---------- 1. Submit feedback: clean -> AI -> report -> PDF -> email -> DB ----------
@@ -188,12 +187,12 @@ app.post('/api/feedback', async (req, res) => {
     };
 
     const html = reportHTML(record, '/assets/logo.png');
-    saveHtml(html, `${record.submissionId}.html`);
+    await saveHtml(html, `${record.submissionId}.html`);
 
     const pdfBuffer = await buildPdf(record);
     const pdfFileName = `${record.submissionId}.pdf`;
-    const saved = savePdf(pdfBuffer, pdfFileName);
-    record.pdfUrl = reportUrl(pdfFileName);
+    const saved = await savePdf(pdfBuffer, pdfFileName);
+    record.pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
 
     let emailError = null;
     try {
@@ -546,12 +545,12 @@ app.post('/api/reports/combined', async (req, res) => {
     const meta = { from, to, generatedAt: new Date().toISOString(), ...overall };
 
     const html = combinedHTML(meta, rows, '/assets/logo.png');
-    saveHtml(html, `combined-${from}-to-${to}.html`);
+    await saveHtml(html, `combined-${from}-to-${to}.html`);
 
     const pdfBuffer = await buildCombinedPdf(meta, rows);
     const pdfFileName = `combined-${from}-to-${to}.pdf`;
-    const saved = savePdf(pdfBuffer, pdfFileName);
-    const pdfUrl = reportUrl(pdfFileName);
+    const saved = await savePdf(pdfBuffer, pdfFileName);
+    const pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
 
     let emailSent = false;
     let emailError = null;
@@ -590,8 +589,61 @@ app.post('/api/reports/combined', async (req, res) => {
   }
 });
 
-// ---------- Static: generated reports + frontend ----------
-app.use('/reports', express.static(reportsDir));
+// ---------- Report downloads: disk -> storage -> regenerate on demand ----------
+const REPORT_FILE_RE = /^([A-Za-z0-9._-]+)\.(html|pdf)$/;
+const COMBINED_FILE_RE = /^combined-(\d{4}-\d{2})-to-(\d{4}-\d{2})\.(html|pdf)$/;
+
+async function renderReportOnDemand(fileName) {
+  const single = REPORT_FILE_RE.exec(fileName);
+  if (single && !fileName.startsWith('combined-')) {
+    const record = await getFeedbackReport(single[1]);
+    if (!record) return null;
+    if (single[2] === 'pdf') {
+      return { buffer: await buildPdf(record), contentType: 'application/pdf' };
+    }
+    return { buffer: Buffer.from(reportHTML(record, '/assets/logo.png')), contentType: 'text/html; charset=utf-8' };
+  }
+  const combined = COMBINED_FILE_RE.exec(fileName);
+  if (combined) {
+    const rows = await queryFeedback({ from: `${combined[1]}-01`, to: `${combined[2]}-28` });
+    if (!rows.length) return null;
+    const overall = await analyzeCombined(rows, { apiKey: geminiApiKey });
+    const meta = { from: combined[1], to: combined[2], generatedAt: new Date().toISOString(), ...overall };
+    if (combined[3] === 'pdf') {
+      return { buffer: await buildCombinedPdf(meta, rows), contentType: 'application/pdf' };
+    }
+    return { buffer: Buffer.from(combinedHTML(meta, rows, '/assets/logo.png')), contentType: 'text/html; charset=utf-8' };
+  }
+  return null;
+}
+
+app.get('/reports/:file', async (req, res) => {
+  const fileName = decodeURIComponent(req.params.file || '');
+  if (!REPORT_FILE_RE.test(fileName)) {
+    return res.status(400).send('Bad request');
+  }
+  try {
+    const found = await getReport(fileName);
+    if (found) {
+      res.set('Content-Type', found.contentType);
+      res.set('Content-Length', found.buffer.length);
+      res.set('Cache-Control', 'public, max-age=3600');
+      return res.send(found.buffer);
+    }
+    const rendered = await renderReportOnDemand(fileName);
+    if (!rendered) {
+      return res.status(404).send('Report not found');
+    }
+    res.set('Content-Type', rendered.contentType);
+    res.set('Cache-Control', 'public, max-age=3600');
+    return res.send(rendered.buffer);
+  } catch (err) {
+    console.error('[GET /reports/:file]', err);
+    res.status(500).send('Report generation failed');
+  }
+});
+
+// ---------- Static: frontend ----------
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ---------- Token-based feedback form (Phase 2) ----------
@@ -817,7 +869,7 @@ function runMonthlySend() {
 }
 
 function runSixMonthReport() {
-  return generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml })
+  return generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml, fallbackReportUrl })
     .catch((err) => console.error('[Cron] six-month report failed:', err));
 }
 
