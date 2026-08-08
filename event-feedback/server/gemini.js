@@ -1,4 +1,4 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { GoogleGenAI } = require('@google/genai');
 
 // gemini-2.5-flash is deprecated for new accounts; defaults to a newer model.
 // Override with GEMINI_MODEL in .env if needed.
@@ -92,16 +92,16 @@ async function analyzeFeedback(data, { apiKey } = {}) {
   if (!apiKey) return { analysis: fallbackAnalysis(data), usedAi: false };
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: MODEL });
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: PROMPT_TEMPLATE(data) }] }],
-      generationConfig: {
+    const genAI = new GoogleGenAI({ apiKey });
+    const result = await genAI.models.generateContent({
+      model: MODEL,
+      contents: PROMPT_TEMPLATE(data),
+      config: {
         temperature: 0.4,
         responseMimeType: 'application/json'
       }
     });
-    const text = result.response.text();
+    const text = result.text;
     const parsed = parseGeminiJson(text);
     return { analysis: normalizeAnalysis(parsed, data), usedAi: true };
   } catch (err) {
@@ -145,13 +145,16 @@ ${input}`;
   if (!apiKey) return fallback;
 
   try {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: MODEL });
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.4, responseMimeType: 'application/json' }
+    const genAI = new GoogleGenAI({ apiKey });
+    const result = await genAI.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      config: {
+        temperature: 0.4,
+        responseMimeType: 'application/json'
+      }
     });
-    const parsed = parseGeminiJson(result.response.text());
+    const parsed = parseGeminiJson(result.text);
     if (!parsed) return fallback;
     return {
       overallSentimentBreakdown: {
