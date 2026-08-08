@@ -89,9 +89,11 @@ function verifySession(token) {
 
 function requireAdminSession(req, res, next) {
   if (!ADMIN_AUTH_ENABLED) return next();
-  // The Google Sheets sync endpoint is public-but-secret-gated
-  // (X-Sync-Secret); it must not be shadowed by the admin session gate.
-  if (req.path === '/sync') return next();
+  // Public-but-secret-gated endpoints that must not be shadowed by the
+  // admin session gate:
+  //  - /api/clients/sync: Google Sheets automation (X-Sync-Secret)
+  //  - /api/cron/*: Vercel Cron jobs have no session cookie (CRON_SECRET)
+  if (req.path === '/sync' || req.baseUrl === '/api/cron') return next();
   if (verifySession(parseCookies(req)[SESSION_COOKIE])) return next();
   if (req.originalUrl.split('?')[0].endsWith('.html')) {
     return res.redirect('/login.html');
@@ -819,14 +821,19 @@ function runSixMonthReport() {
     .catch((err) => console.error('[Cron] six-month report failed:', err));
 }
 
-cron.schedule(MONTHLY_SEND_CRON, () => runMonthlySend());
-cron.schedule(SIX_MONTH_REPORT_CRON, () => runSixMonthReport());
+// NOTE: node-cron is scheduled below, only when running as a long-lived
+// server (require.main === module). On Vercel, scheduling is done via
+// vercel.json "crons" hitting the /api/cron/* endpoints below.
 
 const CRON_SECRET = process.env.CRON_SECRET || '';
 
 function requireCronSecret(req, res, next) {
-  if (CRON_SECRET && req.headers['x-cron-secret'] !== CRON_SECRET) {
-    return res.status(401).json({ ok: false, error: 'Unauthorized' });
+  if (CRON_SECRET) {
+    const supplied = req.headers['x-cron-secret'] ||
+      (req.headers.authorization && req.headers.authorization.startsWith('Bearer ') ? req.headers.authorization.slice(7) : '');
+    if (supplied !== CRON_SECRET) {
+      return res.status(401).json({ ok: false, error: 'Unauthorized' });
+    }
   }
   next();
 }

@@ -5,5 +5,9 @@
       "maxDuration": 60,
       "memory": 1024
     }
-  }
+  },
+  "crons": [
+    { "path": "/api/cron/monthly-send", "schedule": "0 9 1 * *" },
+    { "path": "/api/cron/six-month-report", "schedule": "0 9 1 1,7 *" }
+  ]
 }
