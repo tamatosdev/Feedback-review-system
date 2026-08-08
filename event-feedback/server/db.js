@@ -104,7 +104,7 @@ if (PG_MODE) {
   pool.on('error', (err) => console.error('[db] Postgres pool error:', err.message));
 }
 
-const ID_TYPE = PG_MODE ? 'SERIAL' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+const ID_TYPE = PG_MODE ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
 
 // Dependency order matters for Postgres: FKs can only reference tables that
 // already exist at CREATE time (SQLite is lenient, Postgres is not).
@@ -170,6 +170,26 @@ async function migrateRemote() {
   }
 }
 
+// Postgres: FK targets must have a unique/PK constraint. A schema created by
+// an earlier buggy version may have clients/feedback_requests without a PK
+// (CREATE TABLE IF NOT EXISTS won't fix that) — repair idempotently first.
+async function ensurePrimaryKeys() {
+  if (!PG_MODE) return;
+  for (const table of ['clients', 'feedback_requests']) {
+    const hasPk = await pool.query(
+      "SELECT 1 FROM information_schema.table_constraints WHERE constraint_type = 'PRIMARY KEY' AND table_name = $1",
+      [table]
+    );
+    if (hasPk.rows.length) continue;
+    try {
+      await pool.query(`ALTER TABLE ${table} ADD PRIMARY KEY (id)`);
+      console.log(`[db] added missing PRIMARY KEY to ${table}`);
+    } catch (err) {
+      if (!/does not exist|duplicate key|already exists/.test(err.message)) throw err;
+    }
+  }
+}
+
 function ensureSchema() {
   if (!schemaReady) {
     schemaReady = (async () => {
@@ -178,6 +198,7 @@ function ensureSchema() {
         // allRows(), which await ensureSchema() (that would be a circular
         // await on the in-flight promise). Each statement runs separately
         // so a failure in one doesn't roll back the others.
+        await ensurePrimaryKeys();
         for (const stmt of SCHEMA_STATEMENTS) {
           await pool.query(stmt);
         }
