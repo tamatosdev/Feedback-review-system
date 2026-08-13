@@ -41,31 +41,33 @@
     <!-- Filters -->
     <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5 space-y-4">
       <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Filters</h2>
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div>
-          <label class="block text-xs font-bold mb-1">From</label>
-          <input id="filterFrom" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div>
-          <label class="block text-xs font-bold mb-1">To</label>
-          <input id="filterTo" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div>
-          <label class="block text-xs font-bold mb-1">Project / Service Name</label>
-          <select id="filterEvent" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-            <option value="">All projects / services</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-bold mb-1">Sentiment</label>
-          <select id="filterSentiment" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
-            <option value="">All</option>
-            <option value="Positive">Positive</option>
-            <option value="Neutral">Neutral</option>
-            <option value="Negative">Negative</option>
-          </select>
+
+      <div>
+        <label class="block text-xs font-bold mb-2">Date range</label>
+        <div id="rangeBtns" class="flex flex-wrap gap-2"></div>
+        <button id="customToggle" type="button" class="mt-2 text-xs font-bold text-gray-500 hover:text-ink transition">+ Custom range</button>
+        <div id="customRange" class="hidden mt-3 grid grid-cols-2 gap-4 max-w-md">
+          <div>
+            <label class="block text-xs font-bold mb-1">From</label>
+            <input id="filterFrom" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+          <div>
+            <label class="block text-xs font-bold mb-1">To</label>
+            <input id="filterTo" type="date" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
         </div>
       </div>
+
+      <div>
+        <label class="block text-xs font-bold mb-2">Project / Service Name</label>
+        <div id="serviceBtns" class="flex flex-wrap gap-2"></div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-bold mb-2">Sentiment</label>
+        <div id="sentBtns" class="flex flex-wrap gap-2"></div>
+      </div>
+
       <div class="flex flex-wrap items-center gap-3">
         <button id="applyBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition">Apply Filters</button>
         <button id="clearBtn" class="text-sm font-semibold text-gray-500 hover:text-ink px-2 transition">Clear</button>
@@ -110,12 +112,94 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
+    const state = { service: '', sentiment: '', range: 'alltime' };
+
+    const RANGES = [
+      { key: '1m', label: '1 Month' },
+      { key: '3m', label: '3 Months' },
+      { key: '6m', label: '6 Months' },
+      { key: 'year', label: 'This Year' },
+      { key: 'alltime', label: 'All Time' }
+    ];
+    const SENTIMENTS = [
+      { key: '', label: 'All', active: 'bg-brand text-ink border-brand' },
+      { key: 'Positive', label: 'Positive', active: 'bg-green-600 text-white border-green-600' },
+      { key: 'Neutral', label: 'Neutral', active: 'bg-orange-500 text-white border-orange-500' },
+      { key: 'Negative', label: 'Negative', active: 'bg-red-600 text-white border-red-600' }
+    ];
+
+    function fmtDate(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function computeRange(key) {
+      const end = new Date();
+      end.setHours(0, 0, 0, 0);
+      switch (key) {
+        case '1m': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth() - 1, end.getDate())), to: fmtDate(end) };
+        case '3m': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth() - 3, end.getDate())), to: fmtDate(end) };
+        case '6m': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth() - 6, end.getDate())), to: fmtDate(end) };
+        case 'year': return { from: fmtDate(new Date(end.getFullYear(), 0, 1)), to: fmtDate(end) };
+        default: return { from: '', to: '' };
+      }
+    }
+
+    const chipBase = 'rounded-xl border px-4 py-2 text-sm font-bold transition cursor-pointer select-none';
+    const chipOn = 'bg-brand text-ink border-brand shadow-sm';
+    const chipOff = 'bg-white text-gray-600 border-gray-200 hover:border-brand hover:text-ink';
+
+    function renderRangeButtons() {
+      $('rangeBtns').innerHTML = RANGES.map((r) =>
+        `<button type="button" data-range="${r.key}" class="${chipBase} ${state.range === r.key ? chipOn : chipOff}">${r.label}</button>`).join('');
+      $('rangeBtns').querySelectorAll('button').forEach((b) => {
+        b.addEventListener('click', () => {
+          const range = computeRange(b.dataset.range);
+          $('filterFrom').value = range.from;
+          $('filterTo').value = range.to;
+          state.range = b.dataset.range;
+          renderRangeButtons();
+          loadAll();
+        });
+      });
+    }
+
+    function renderSentButtons() {
+      $('sentBtns').innerHTML = SENTIMENTS.map((s) =>
+        `<button type="button" data-sent="${s.key}" class="${chipBase} ${state.sentiment === s.key ? s.active : chipOff}">${s.label}</button>`).join('');
+      $('sentBtns').querySelectorAll('button').forEach((b) => {
+        b.addEventListener('click', () => {
+          state.sentiment = b.dataset.sent;
+          renderSentButtons();
+          loadAll();
+        });
+      });
+    }
+
+    function renderServiceButtons(events) {
+      const names = ['All Services'].concat(events || []);
+      $('serviceBtns').innerHTML = names.map((n) => {
+        const isAll = n === 'All Services';
+        const active = isAll ? state.service === '' : state.service === n;
+        return `<button type="button" data-service="${isAll ? '' : n.replace(/"/g, '&quot;')}" class="${chipBase} ${active ? chipOn : chipOff}">${n}</button>`;
+      }).join('');
+      $('serviceBtns').querySelectorAll('button').forEach((b) => {
+        b.addEventListener('click', () => {
+          const v = b.dataset.service;
+          state.service = state.service === v ? '' : v;
+          loadAll();
+        });
+      });
+    }
+
     function currentFilters() {
       const p = new URLSearchParams();
       if ($('filterFrom').value) p.set('from', $('filterFrom').value);
       if ($('filterTo').value) p.set('to', $('filterTo').value);
-      if ($('filterSentiment').value) p.set('sentiment', $('filterSentiment').value);
-      if ($('filterEvent').value) p.set('serviceType', $('filterEvent').value);
+      if (state.sentiment) p.set('sentiment', state.sentiment);
+      if (state.service) p.set('serviceType', state.service);
       return p;
     }
 
@@ -137,12 +221,14 @@
 
     async function loadAll() {
       const p = currentFilters();
-      const [statsRes, listRes] = await Promise.all([
+      const [statsRes, listRes, eventsRes] = await Promise.all([
         fetch('/api/stats?' + p.toString()),
-        fetch('/api/feedback?' + p.toString())
+        fetch('/api/feedback?' + p.toString()),
+        fetch('/api/stats')
       ]);
       const stats = (await statsRes.json()).data;
       const list = (await listRes.json()).data;
+      const events = (await eventsRes.json()).data.events;
 
       $('statCards').innerHTML =
         statCard('Total Feedback', stats.total) +
@@ -151,9 +237,7 @@
         statCard('Neutral', stats.sentimentCounts.Neutral, 'text-orange-600') +
         statCard('Negative', stats.sentimentCounts.Negative, 'text-red-600');
 
-      const evSelect = $('filterEvent');
-      const current = evSelect.value;
-      evSelect.innerHTML = '<option value="">All projects / services</option>' + stats.events.map((e) => `<option ${e === current ? 'selected' : ''}>${e}</option>`).join('');
+      renderServiceButtons(events);
 
       $('rowCount').textContent = list.length + ' result(s)';
       $('emptyState').classList.toggle('hidden', list.length > 0);
@@ -172,28 +256,32 @@
         </tr>`).join('');
     }
 
-    function refreshEvents() {
-      fetch('/api/stats').then((r) => r.json()).then((j) => {
-        const sel = $('filterEvent');
-        const cur = sel.value;
-        sel.innerHTML = '<option value="">All projects / services</option>' + j.data.events.map((e) => `<option ${e === cur ? 'selected' : ''}>${e}</option>`).join('');
-      }).catch(() => {});
-    }
-
-    $('applyBtn').addEventListener('click', loadAll);    $('clearBtn').addEventListener('click', () => {
+    $('applyBtn').addEventListener('click', loadAll);
+    $('clearBtn').addEventListener('click', () => {
       $('filterFrom').value = '';
       $('filterTo').value = '';
-      $('filterSentiment').value = '';
-      refreshEvents();
+      state.service = '';
+      state.sentiment = '';
+      state.range = 'alltime';
+      renderRangeButtons();
+      renderSentButtons();
       loadAll();
     });
+
+    $('customToggle').addEventListener('click', () => {
+      const box = $('customRange');
+      box.classList.toggle('hidden');
+      $('customToggle').textContent = box.classList.contains('hidden') ? '+ Custom range' : '– Hide custom range';
+    });
+    $('filterFrom').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
+    $('filterTo').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
 
     $('combinedBtn').addEventListener('click', async () => {
       const btn = $('combinedBtn');
       const from = $('filterFrom').value;
       const to = $('filterTo').value;
       if (!from || !to) {
-        alert('Please select a From and To date first.');
+        alert('Pick a date range first — use a quick-range button or the custom From/To dates.');
         return;
       }
       btn.disabled = true;
@@ -225,6 +313,8 @@
       window.location.href = '/login.html';
     });
 
+    renderRangeButtons();
+    renderSentButtons();
     loadAll().catch((e) => alert('Failed to load dashboard: ' + e.message));
   </script>
 </body>

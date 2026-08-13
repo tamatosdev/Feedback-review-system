@@ -96,17 +96,28 @@ function ensureSpace(doc, needed) {
 }
 
 function infoTable(doc, rows) {
-  const rowH = 26;
-  const labelW = 180;
+  const pad = 8;
+  const labelW = 185;
   for (const [label, value] of rows) {
-    ensureSpace(doc, rowH + 8);
-    doc.rect(MARGIN, doc.y, CONTENT_W, rowH).strokeColor(BORDER).lineWidth(1).stroke();
-    doc.rect(MARGIN, doc.y, labelW, rowH).fill(ROW_BG);
-    doc.strokeColor(BORDER).lineWidth(1);
-    doc.rect(MARGIN, doc.y, labelW, rowH).stroke();
-    doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(9.5).text(String(label), MARGIN + 10, doc.y + 8, { width: labelW - 20 });
-    doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5).text(String(value), MARGIN + labelW + 10, doc.y + 8, { width: CONTENT_W - labelW - 20 });
-    doc.y += rowH;
+    doc.font(doc.interFonts.bold).fontSize(9.5);
+    const labelH = doc.heightOfString(String(label), { width: labelW - pad * 2 });
+    doc.font(doc.interFonts.regular).fontSize(9.5);
+    const valueH = doc.heightOfString(String(value), { width: CONTENT_W - labelW - pad * 2 });
+    const rowH = Math.max(labelH, valueH) + pad * 2;
+    ensureSpace(doc, rowH + 6);
+
+    const y = doc.y;
+    doc.rect(MARGIN, y, labelW, rowH).fill(ROW_BG);
+    doc.strokeColor(BORDER).lineWidth(0.8);
+    doc.rect(MARGIN, y, CONTENT_W, rowH).stroke();
+    doc.moveTo(MARGIN + labelW, y).lineTo(MARGIN + labelW, y + rowH).stroke();
+
+    doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(9.5);
+    doc.text(String(label), MARGIN + pad, y + pad, { width: labelW - pad * 2 });
+    doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5);
+    doc.text(String(value), MARGIN + labelW + pad, y + pad, { width: CONTENT_W - labelW - pad * 2 });
+
+    doc.y = y + rowH;
   }
   doc.moveDown(0.3);
 }
@@ -130,12 +141,13 @@ function drawStars(doc, rating) {
 
 function drawBadge(doc, sentiment) {
   const c = SENTIMENT_COLORS[sentiment] || SENTIMENT_COLORS.Neutral;
+  const y0 = doc.y;
   doc.font(doc.interFonts.bold).fontSize(10);
   const w = doc.widthOfString(sentiment) + 28;
   const h = 24;
-  doc.roundedRect(MARGIN + 10, doc.y, w, h, 12).fill(c.bg);
-  doc.fillColor(c.text).text(sentiment, MARGIN + 10 + 14, doc.y + 7);
-  doc.y += h + 6;
+  doc.roundedRect(MARGIN + 10, y0, w, h, 12).fill(c.bg);
+  doc.fillColor(c.text).text(sentiment, MARGIN + 10 + 14, y0 + 7);
+  doc.y = y0 + h + 6;
 }
 
 function drawBullets(doc, items, label) {

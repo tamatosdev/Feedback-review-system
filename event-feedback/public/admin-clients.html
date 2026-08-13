@@ -42,18 +42,17 @@
 
   <main class="max-w-6xl mx-auto px-4 py-8 space-y-8">
 
-    <!-- Upload clients -->
+    <!-- Sync from Google Sheet -->
     <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5 space-y-4">
-      <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Upload Clients (Excel / CSV)</h2>
-      <p class="text-xs text-gray-500 font-medium">Header row required: <b>Name</b>, <b>Email</b>, <b>Company Name</b> (optional), <b>Service Type</b>, <b>Status</b> (optional, defaults to active). Rows with missing/invalid emails or duplicate emails are skipped with a reason.</p>
+      <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Sync from Google Sheet</h2>
+      <p class="text-xs text-gray-500 font-medium">Pulls the client list from the published Google Sheet (set <code>SHEET_CSV_URL</code> in the environment) and upserts it by email — new clients are added, existing ones updated. Invalid rows are skipped with a reason.</p>
       <div class="flex flex-wrap items-center gap-3">
-        <input id="uploadFile" type="file" accept=".xlsx,.csv"
-          class="text-sm text-gray-600 file:mr-3 file:rounded-xl file:border file:border-gray-200 file:bg-gray-50 file:px-4 file:py-2 file:text-sm file:font-bold file:text-ink hover:file:bg-gray-100 transition" />
-        <button id="uploadBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">Upload</button>
-        <button id="templateBtn" class="text-sm font-semibold text-brandDark underline underline-offset-2 hover:text-ink px-1 transition">Download template (.csv)</button>
+        <button id="sheetSyncBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">Sync from Google Sheet</button>
+        <a id="sheetEditLink" href="#" target="_blank" rel="noopener noreferrer" class="hidden text-sm font-semibold text-brandDark underline underline-offset-2 hover:text-ink px-1 transition">Open Google Sheet</a>
+        <p id="sheetEditNote" class="hidden text-xs text-gray-400 font-medium">Google Sheet edit link not configured (<code>SHEET_EDIT_URL</code>).</p>
       </div>
-      <p id="uploadError" class="hidden text-sm font-semibold text-red-600"></p>
-      <div id="uploadSummary" class="hidden"></div>
+      <p id="syncError" class="hidden text-sm font-semibold text-red-600"></p>
+      <div id="syncSummary" class="hidden"></div>
     </section>
 
     <!-- Add client -->
@@ -235,57 +234,55 @@
       }
     }
 
-    function uploadSummary(summary) {
-      const el = $('uploadSummary');
+    function syncSummary(json) {
+      const el = $('syncSummary');
       el.classList.remove('hidden');
-      const addedLine = `<p class="text-sm font-semibold ${summary.added ? 'text-green-600' : 'text-gray-600'}">${summary.added} client(s) added out of ${summary.total} row(s).</p>`;
-      const skippedList = summary.skipped.length
-        ? `<ul class="mt-1 text-xs text-red-600 space-y-0.5">${summary.skipped.map((s) => `<li>row ${s.row}: ${s.reason}</li>`).join('')}</ul>`
+      const line = `<p class="text-sm font-semibold ${json.inserted ? 'text-green-600' : 'text-gray-600'}">${json.inserted} inserted, ${json.updated} updated, ${json.skipped.length} skipped (${json.total} row(s) total).</p>`;
+      const skippedList = json.skipped.length
+        ? `<ul class="mt-1 text-xs text-red-600 space-y-0.5">${json.skipped.map((s) => `<li>row ${s.row}: ${esc(s.reason)}</li>`).join('')}</ul>`
         : '';
-      el.innerHTML = addedLine + skippedList;
+      el.innerHTML = line + skippedList;
     }
 
-    async function uploadClients() {
-      const fileInput = $('uploadFile');
-      if (!fileInput.files || !fileInput.files.length) {
-        $('uploadError').textContent = 'Choose a .xlsx or .csv file first.';
-        $('uploadError').classList.remove('hidden');
-        return;
-      }
-      const btn = $('uploadBtn');
+    async function syncFromSheet() {
+      const btn = $('sheetSyncBtn');
       btn.disabled = true;
-      btn.textContent = 'Uploading…';
-      $('uploadError').classList.add('hidden');
-      $('uploadSummary').classList.add('hidden');
+      btn.textContent = 'Syncing…';
+      $('syncError').classList.add('hidden');
+      $('syncSummary').classList.add('hidden');
       try {
-        const fd = new FormData();
-        fd.append('file', fileInput.files[0]);
-        const res = await fetch('/api/clients/bulk-upload', { method: 'POST', body: fd });
+        const res = await fetch('/api/clients/sync-from-sheet', { method: 'POST' });
         const json = await res.json();
-        if (!res.ok || !json.ok) throw new Error(json.error || 'Upload failed.');
-        uploadSummary(json);
-        fileInput.value = '';
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Sync failed.');
+        syncSummary(json);
         await loadClients();
       } catch (err) {
-        $('uploadError').textContent = err.message;
-        $('uploadError').classList.remove('hidden');
+        $('syncError').textContent = err.message;
+        $('syncError').classList.remove('hidden');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Upload';
+        btn.textContent = 'Sync from Google Sheet';
       }
     }
 
-    $('uploadBtn').addEventListener('click', uploadClients);
+    async function loadSheetConfig() {
+      try {
+        const res = await fetch('/api/config/sheet');
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load sheet config.');
+        if (json.sheetEditUrl) {
+          $('sheetEditLink').href = json.sheetEditUrl;
+          $('sheetEditLink').classList.remove('hidden');
+        } else {
+          $('sheetEditNote').classList.remove('hidden');
+        }
+      } catch (err) {
+        $('sheetEditNote').textContent = err.message;
+        $('sheetEditNote').classList.remove('hidden');
+      }
+    }
 
-    $('templateBtn').addEventListener('click', () => {
-      const csv = 'Name,Email,Company Name,Service Type,Status\nAcme Inc,hello@acme.com,Acme Inc,Branding Package,active\n';
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = 'clients-template.csv';
-      a.click();
-      URL.revokeObjectURL(a.href);
-    });
+    $('sheetSyncBtn').addEventListener('click', syncFromSheet);
 
     $('clientForm').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -323,6 +320,7 @@
     });
 
     loadClients().catch((e) => alert('Failed to load clients: ' + e.message));
+    loadSheetConfig();
   </script>
 </body>
 </html>

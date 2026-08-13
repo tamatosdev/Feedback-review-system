@@ -289,13 +289,6 @@ const CLIENT_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_UPLOAD_ROWS = 500;
 
-const multer = require('multer');
-const XLSX = require('xlsx');
-const clientUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_UPLOAD_BYTES }
-});
-
 function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
@@ -322,82 +315,100 @@ function clientRowValidationError(mapped) {
   return null;
 }
 
-function parseClientSheet(buffer) {
-  const workbook = XLSX.read(buffer, { type: 'buffer' });
-  const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  return XLSX.utils.sheet_to_json(sheet, { defval: '' });
+// Minimal RFC-4180-ish CSV parser (quoted fields, escaped quotes, CRLF). Returns
+// an array of row arrays. Used for the published Google Sheet CSV — no xlsx
+// dependency needed since the sheet is published as plain CSV.
+function parseCsvRows(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (text[i + 1] === '"') {
+          field += '"';
+          i += 1;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ',') {
+      row.push(field);
+      field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i += 1;
+      row.push(field);
+      field = '';
+      if (row.length > 1 || row[0] !== '') rows.push(row);
+      row = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field.length > 0 || row.length > 0) {
+    row.push(field);
+    if (row.length > 1 || row[0] !== '') rows.push(row);
+  }
+  return rows;
 }
 
-app.post('/api/clients/bulk-upload', async (req, res) => {
-  clientUpload.single('file')(req, res, async (uploadErr) => {
-    if (uploadErr) {
-      if (uploadErr.code === 'LIMIT_FILE_SIZE') {
-        return res.status(400).json({ ok: false, error: `File too large (max ${Math.floor(MAX_UPLOAD_BYTES / 1024 / 1024)} MB).` });
-      }
-      return res.status(400).json({ ok: false, error: `Upload failed: ${uploadErr.message}` });
+// CSV text -> array of row objects keyed by the header row (same shape the old
+// xlsx sheet_to_json produced: first row is the header, missing cells -> '').
+function parseClientCsv(text) {
+  const rows = parseCsvRows(String(text).replace(/^\uFEFF/, ''));
+  if (!rows.length) return [];
+  const headers = rows[0].map((h) => String(h ?? '').trim());
+  return rows
+    .slice(1)
+    .filter((r) => r.some((v) => String(v ?? '').trim() !== ''))
+    .map((r) => {
+      const obj = {};
+      headers.forEach((h, i) => {
+        obj[h] = r[i] ?? '';
+      });
+      return obj;
+    });
+}
+
+// Shared upsert-by-email loop for both sync endpoints. Returns
+// { inserted, updated, skipped: [{ row, reason }] } with 1-based row numbers.
+async function syncClientRows(rows) {
+  const batchEmails = new Set();
+  const skipped = [];
+  let inserted = 0;
+  let updated = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const raw = rows[i];
+    const mapped = mapClientRow(raw);
+    const reason = clientRowValidationError(mapped);
+    if (reason) {
+      skipped.push({ row: i + 1, reason });
+      continue;
     }
-    try {
-      if (!req.file) {
-        return res.status(400).json({ ok: false, error: 'No file provided.' });
-      }
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      if (!['.csv', '.xlsx'].includes(ext)) {
-        return res.status(400).json({ ok: false, error: `Unsupported file type "${ext || 'unknown'}". Upload a .csv or .xlsx file.` });
-      }
-
-      let rows;
-      try {
-        rows = parseClientSheet(req.file.buffer);
-      } catch (err) {
-        return res.status(400).json({ ok: false, error: `Could not parse the file as ${ext === '.csv' ? 'CSV' : 'Excel'}: ${err.message}` });
-      }
-      if (!rows.length) {
-        return res.status(400).json({ ok: false, error: 'The file has no data rows (header row required).' });
-      }
-      if (rows.length > MAX_UPLOAD_ROWS) {
-        return res.status(400).json({ ok: false, error: `Too many rows (${rows.length}). Max ${MAX_UPLOAD_ROWS} clients per upload.` });
-      }
-
-      const existingEmails = new Set(await listClientEmails());
-      const batchEmails = new Set();
-      const added = [];
-      const skipped = [];
-      let rowNum = 1;
-
-      for (const raw of rows) {
-        rowNum += 1;
-        const mapped = mapClientRow(raw);
-        const reason = clientRowValidationError(mapped);
-        if (reason) {
-          skipped.push({ row: rowNum, reason });
-          continue;
-        }
-        const emailKey = mapped.email.toLowerCase();
-        if (existingEmails.has(emailKey) || batchEmails.has(emailKey)) {
-          skipped.push({ row: rowNum, reason: 'duplicate email' });
-          continue;
-        }
-
-        const client = await insertClient({
-          name: mapped.name,
-          email: mapped.email,
-          company_name: mapped.company_name,
-          service_type: mapped.service_type,
-          status: (mapped.status || 'active').toLowerCase()
-        });
-        added.push(client);
-        existingEmails.add(emailKey);
-        batchEmails.add(emailKey);
-      }
-
-      console.log(`[BulkUpload] ${req.file.originalname}: ${added.length} added, ${skipped.length} skipped`);
-      res.status(201).json({ ok: true, added: added.length, skipped, total: added.length + skipped.length });
-    } catch (err) {
-      console.error('[POST /api/clients/bulk-upload]', err);
-      res.status(500).json({ ok: false, error: err.message });
+    const emailKey = mapped.email.toLowerCase();
+    if (batchEmails.has(emailKey)) {
+      skipped.push({ row: i + 1, reason: 'duplicate email' });
+      continue;
     }
-  });
-});
+    batchEmails.add(emailKey);
+    const { action } = await upsertClientByEmail({
+      name: mapped.name,
+      email: mapped.email,
+      company_name: mapped.company_name,
+      service_type: mapped.service_type,
+      status: (mapped.status || 'active').toLowerCase()
+    });
+    if (action === 'inserted') inserted += 1;
+    else updated += 1;
+  }
+  return { inserted, updated, skipped };
+}
 
 // ---------- Google Sheets sync (upsert by email, X-Sync-Secret guarded) ----------
 const SYNC_SECRET = process.env.SYNC_SECRET || '';
@@ -423,39 +434,74 @@ app.post('/api/clients/sync', requireSyncSecret, async (req, res) => {
       return res.status(400).json({ ok: false, error: `Too many rows (${clients.length}). Max ${MAX_UPLOAD_ROWS} clients per sync.` });
     }
 
-    const batchEmails = new Set();
-    const skipped = [];
-    let inserted = 0;
-    let updated = 0;
-
-    for (const raw of clients) {
-      const mapped = mapClientRow(raw);
-      const reason = clientRowValidationError(mapped);
-      if (reason) {
-        skipped.push({ row: clients.indexOf(raw) + 1, reason });
-        continue;
-      }
-      const emailKey = mapped.email.toLowerCase();
-      if (batchEmails.has(emailKey)) {
-        skipped.push({ row: clients.indexOf(raw) + 1, reason: 'duplicate email' });
-        continue;
-      }
-      batchEmails.add(emailKey);
-      const { action } = await upsertClientByEmail({
-        name: mapped.name,
-        email: mapped.email,
-        company_name: mapped.company_name,
-        service_type: mapped.service_type,
-        status: (mapped.status || 'active').toLowerCase()
-      });
-      if (action === 'inserted') inserted += 1;
-      else updated += 1;
-    }
+    const { inserted, updated, skipped } = await syncClientRows(clients);
 
     console.log(`[ClientSync] ${clients.length} rows: ${inserted} inserted, ${updated} updated, ${skipped.length} skipped`);
     res.json({ ok: true, inserted, updated, skipped, total: clients.length });
   } catch (err) {
     console.error('[POST /api/clients/sync]', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------- Sync from published Google Sheet CSV (admin session, button on the admin page) ----------
+const SHEET_CSV_URL = (process.env.SHEET_CSV_URL || '').trim();
+const SHEET_EDIT_URL = (process.env.SHEET_EDIT_URL || '').trim();
+
+// Admin-page config: the edit URL is delivered via a session-protected
+// endpoint (the static admin page has no server-side templating; /api/health
+// is open, so it must not leak the sheet link).
+app.get('/api/config/sheet', requireAdminSession, (req, res) => {
+  res.json({ ok: true, sheetEditUrl: SHEET_EDIT_URL });
+});
+
+app.post('/api/clients/sync-from-sheet', async (req, res) => {
+  try {
+    if (!SHEET_CSV_URL) {
+      return res.status(400).json({
+        ok: false,
+        error: 'SHEET_CSV_URL is not configured. Set it to the published CSV link of your Google Sheet (File → Share → Publish to web → CSV).'
+      });
+    }
+    let sheetRes;
+    try {
+      sheetRes = await fetch(SHEET_CSV_URL, {
+        signal: AbortSignal.timeout(20000),
+        headers: { Accept: 'text/csv,text/plain,*/*' }
+      });
+    } catch (err) {
+      return res.status(502).json({
+        ok: false,
+        error: `Could not reach the published sheet CSV (${err.message}). Is the sheet published to the web as CSV (File → Share → Publish to web)?`
+      });
+    }
+    if (!sheetRes.ok) {
+      return res.status(502).json({
+        ok: false,
+        error: `Could not fetch the sheet CSV (HTTP ${sheetRes.status} ${sheetRes.statusText}). Make sure the sheet is published to the web as CSV (File → Share → Publish to web).`
+      });
+    }
+    const csvText = await sheetRes.text();
+    if (csvText.length > MAX_UPLOAD_BYTES) {
+      return res.status(400).json({ ok: false, error: 'The published sheet CSV is too large.' });
+    }
+    if (!csvText.trim()) {
+      return res.status(400).json({ ok: false, error: 'The published sheet is empty.' });
+    }
+    const rows = parseClientCsv(csvText);
+    if (!rows.length) {
+      return res.status(400).json({ ok: false, error: 'The sheet has no data rows (header row required).' });
+    }
+    if (rows.length > MAX_UPLOAD_ROWS) {
+      return res.status(400).json({ ok: false, error: `Too many rows (${rows.length}). Max ${MAX_UPLOAD_ROWS} clients per sync.` });
+    }
+
+    const { inserted, updated, skipped } = await syncClientRows(rows);
+
+    console.log(`[SheetSync] ${rows.length} rows: ${inserted} inserted, ${updated} updated, ${skipped.length} skipped`);
+    res.json({ ok: true, inserted, updated, skipped, total: rows.length });
+  } catch (err) {
+    console.error('[POST /api/clients/sync-from-sheet]', err);
     res.status(500).json({ ok: false, error: err.message });
   }
 });

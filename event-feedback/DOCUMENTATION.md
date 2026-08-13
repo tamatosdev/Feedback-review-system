@@ -136,8 +136,6 @@ existing pipeline (clean → AI → PDF → admin email → DB)
 | Email | Nodemailer → Hostinger SMTP | Port 465, SSL/TLS |
 | PDF generation | PDFKit | Branded, Inter fonts, logo embedding |
 | Scheduling | `node-cron` | Two jobs: monthly send + 6-month report |
-| File upload | `multer` (multipart, in-memory, 5 MB limit) | `POST /api/clients/bulk-upload` |
-| Spreadsheet parsing | `xlsx` / SheetJS | `.xlsx` + `.csv` for bulk client upload |
 | Admin sessions | Signed httpOnly cookie (`crypto` HMAC-SHA256, no extra dependency) | Single fixed login via `ADMIN_USERNAME`/`ADMIN_PASSWORD`/`SESSION_SECRET` |
 | Frontend | Static HTML + Tailwind | `public/index.html` (form), `public/dashboard.html`, `public/admin-clients.html` (internal), `public/login.html` |
 | Secrets | `dotenv` | `.env` file |
@@ -208,6 +206,8 @@ Copy `.env.example` → `.env` and fill in. **Never commit `.env`.**
 | `ADMIN_PASSWORD` | Admin login password (single fixed account — no registration) | *(empty → auth disabled + startup warning)* |
 | `SESSION_SECRET` | Random secret that signs the admin session cookie (HMAC-SHA256) | *(empty → auth disabled + startup warning)* |
 | `SYNC_SECRET` | Static secret for the Google Sheets sync endpoint (`X-Sync-Secret` header, `POST /api/clients/sync`) | *(empty → sync endpoint rejects all requests — fail closed)* |
+| `SHEET_CSV_URL` | **Machine-readable pull source** — public read-only CSV link of the client Google Sheet (File → Share → Publish to web → CSV). Used by the "Sync from Google Sheet" button (`POST /api/clients/sync-from-sheet`) to pull clients server-side | *(empty → sync-from-sheet returns a clear error — fail closed)* |
+| `SHEET_EDIT_URL` | **Human link to open and edit the sheet** — the normal shareable Google Sheets URL, e.g. `https://docs.google.com/spreadsheets/d/<sheet-id>/edit`. Rendered as the "Open Google Sheet" link on the admin client page (new tab, via session-protected `GET /api/config/sheet`); not used for data. Clickers need edit access in Google | *(empty → link hidden, small note shown instead)* |
 
 All variables have safe defaults — the app runs with nothing but the optional secrets set.
 
@@ -587,41 +587,62 @@ The same logic is exposed for external schedulers at `POST /api/cron/six-month-r
 - **Delete:** `DELETE /api/clients/:id` after a `confirm()` prompt.
 - All actions use `fetch` and re-render the table in place — no full page reload; a success/error line appears above the table.
 
-### Bulk upload (Excel / CSV)
+### Sync from Google Sheet (button on the admin page)
 
-The page also has an **Upload Clients** card above the add form. It accepts a `.xlsx` or `.csv` file and posts it as `multipart/form-data` (field name `file`) to `POST /api/clients/bulk-upload` (admin session required).
+The page has a **Sync from Google Sheet** card above the add form (no file inputs). It calls `POST /api/clients/sync-from-sheet` (admin session required), which fetches the published CSV from `SHEET_CSV_URL` server-side and **upserts** clients by email — no browser upload, no Google API/OAuth needed.
 
 **Expected column format** (header row required; column order flexible, header names matched case-insensitively with spaces/underscores ignored):
 
 | Column | Required | Notes |
 |---|---|---|
 | `Name` | yes | Skipped with a reason if blank |
-| `Email` | yes | Must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`; duplicates (already in DB **or** earlier in the same file) are skipped |
+| `Email` | yes | Must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`; duplicates (already in DB **or** earlier in the same sync) are updated/skipped per the behavior below |
 | `Company Name` | no | Blank is fine |
 | `Service Type` | no | Blank is fine |
 | `Status` | no | `active` / `inactive` (case-insensitive); blank defaults to `active`, anything else skips the row with a reason |
 
-**Behavior:**
-- Bad rows never stop the batch — each is skipped and reported as `{ row, reason }` (e.g. `row 4: missing email`, `row 7: invalid email format`, `row 9: duplicate email`); row numbers are spreadsheet rows (1 = header).
-- All valid rows are inserted with the existing `insertClient` helper (no duplicated insert logic).
-- Limits: file ≤ 5 MB (`multer` `LIMIT_FILE_SIZE` → clear 400), ≤ 500 data rows, `.csv`/`.xlsx` extension only → any violation returns a clear 400 without touching the DB.
-- Response: `201 { ok, added, skipped: [{ row, reason }], total }`; the page renders the summary inline and refreshes the clients table.
-- **Download template (.csv)** button generates a header-only + one example row file client-side (no server round-trip).
+**Behavior — UPSERT by email (identical to `POST /api/clients/sync`):**
 
-**Dependencies added for this feature:** `multer` (multipart parsing, in-memory storage) and `xlsx` (SheetJS — parses both `.xlsx` and `.csv` so no separate CSV parser is needed). Both are new — nothing suitable existed in `package.json` before.
+- Email already in `clients` → the existing row is **updated** (`name`, `company_name`, `service_type`, `status`); no new row.
+- Email not in `clients` → a new client is **inserted**.
+- Duplicate email **within the same sheet** → later rows skipped (`duplicate email`), first one wins.
+- Rows failing validation (`missing name`, `missing email`, `invalid email format`, bad status) → skipped with `{ row, reason }`; the batch continues.
+- Response: `{ ok, inserted, updated, skipped: [{ row, reason }], total }`; the page renders the summary inline and refreshes the clients table — no page reload.
+- Limits: sheet CSV ≤ 5 MB, ≤ 500 data rows → any violation returns a clear 400 without touching the DB.
+- **Fail closed:** if `SHEET_CSV_URL` is unset, the endpoint returns `400` with instructions to configure it (no crash, no partial sync).
+
+**How to publish your Google Sheet to the web as CSV (one-time setup):**
+
+1. Open the client sheet in Google Sheets.
+2. **File → Share → Publish to the web…**
+3. In the dialog:
+   - **Link** tab, "Entire document" or the specific sheet tab you sync from.
+   - **"Comma-separated values (.csv)"** in the embed/publish format dropdown → click **Publish** (confirm if prompted).
+4. Copy the link it gives you — it looks like `https://docs.google.com/spreadsheets/d/e/2PACX-.../pub?output=csv`. That URL is your `SHEET_CSV_URL`.
+5. Set it in the environment (`SHEET_CSV_URL=...` in `.env` locally, or in the Vercel dashboard) and redeploy/restart.
+6. Optional: to keep the sheet private-ish, note that a published link is **publicly readable** — don't include any columns you must never share (emails are fine here since this sheet is your client list, but verify it's the intended scope). Unpublish anytime via the same dialog.
+
+The published CSV is fetched server-side with a 20-second timeout; if the sheet isn't published (or the link changes), the endpoint returns a clear `502` explaining how to re-publish.
+
+**Two sheet URLs — don't confuse them:**
+
+- `SHEET_CSV_URL` — **machine-readable pull source** (published CSV, used by the sync endpoint). Starts with `https://docs.google.com/spreadsheets/d/e/2PACX-…/pub?output=csv`.
+- `SHEET_EDIT_URL` — **human link to open and edit the sheet** (the normal shareable URL, `…/spreadsheets/d/<sheet-id>/edit`). The admin page shows it as an **Open Google Sheet** link (new tab, `rel="noopener noreferrer"`) next to the sync button; it is delivered through the admin-session-protected `GET /api/config/sheet` endpoint so the sheet link is never exposed publicly. If it's unset, the link is hidden and a small "not configured" note is shown instead — the page never breaks.
+
+Workflow: admin clicks **Open Google Sheet** → edits rows in Google → either clicks the sheet's own **Client Sync → Sync Now** (Apps Script, `SYNC_SECRET`) or clicks **Sync from Google Sheet** on the admin page (`SHEET_CSV_URL`) — both push/pull the same client data.
 
 ### Google Sheets Sync (Sync Now button)
 
 `POST /api/clients/sync` lets a Google Sheet push its rows straight into the `clients` table — no file download/upload. It is **auth-gated by a static secret** (`X-Sync-Secret` header matching the `SYNC_SECRET` env var, constant-time comparison), not the admin session — Google Apps Script can't hold a browser session cookie. **Fail closed:** if `SYNC_SECRET` is unset the endpoint rejects everything (401), and a startup warning is logged.
 
-**Behavior — UPSERT by email (differs from manual bulk upload!):**
+**Behavior — UPSERT by email (identical to sync-from-sheet):**
 
 - Email already in `clients` → the existing row is **updated** (`name`, `company_name`, `service_type`, `status`); no new row.
 - Email not in `clients` → a new client is **inserted**.
 - Duplicate email **within the same payload** → later rows skipped (`duplicate email`), first one wins.
 - Rows failing validation (`missing name`, `missing email`, `invalid email format`, bad status) → skipped with `{ row, reason }`; the batch continues.
 - Response: `{ ok, inserted, updated, skipped: [{ row, reason }], total }`.
-- Same sanity limits as bulk upload (≤ 500 rows, ≤ 5 MB payload via `Content-Length` check).
+- Same sanity limits as sync-from-sheet (≤ 500 rows, ≤ 5 MB payload via `Content-Length` check).
 
 Setup in the sheet (see the Apps Script code in the "Google Sheets Sync" section of the docs — copy from the code block in point 2 of the feature implementation):
 
@@ -652,6 +673,16 @@ The page and the `/api/clients/*` endpoints are protected by a **server-side adm
 
 The public feedback form (`/`, `POST /api/feedback`, `GET /feedback/<token>`) is intentionally **not** protected — clients must reach it without credentials.
 
+### Supabase Data API lockdown (important)
+
+The app talks to Postgres **only** through a direct `node-postgres` connection (`DATABASE_URL`, the Supabase pooler string) — it never uses the Supabase JS client (`@supabase/supabase-js` is not even a dependency), the anon key, or the auto-generated REST/GraphQL API. The Supabase **Data API (PostgREST)** is therefore disabled / locked down on the project:
+
+- **Primary fix — disable the Data API:** Supabase Dashboard → **Integrations → Data API** → toggle **Enable Data API** **off**. With it off, no `/rest/v1/*` endpoint responds at all, regardless of grants or RLS ([Supabase docs — Securing your API](https://supabase.com/docs/guides/api/securing-your-api)).
+- **Defense in depth — RLS + revoked grants:** `server/sql/lockdown_data_api.sql` enables Row-Level Security on `clients`, `feedback_reports`, and `feedback_requests` with an explicit default-deny policy for the `anon` / `authenticated` roles, and revokes table privileges from `anon` / `authenticated` / `service_role` (including future-default privileges). This is safe even with the toggle left on and clears Supabase's `rls_disabled_in_public` and `sensitive_columns_exposed` findings.
+- **Why the app is unaffected:** the pooler connection role owns these tables, and RLS never applies to a table owner (no `FORCE ROW LEVEL SECURITY` is used). Direct `pg` queries keep working; if the app is ever moved to a non-owner role, the SQL file includes a permissive policy template for that role.
+- **Verification:** `curl "https://<project-ref>.supabase.co/rest/v1/clients" -H "apikey: <anon key>" -H "Authorization: Bearer <anon key>"` must return `401/403/404` instead of rows. Re-run Supabase's security check afterwards to confirm both flags are cleared.
+- The storage driver's `/storage/v1/...` uploads (only active when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set) use the Storage service, not the Data API, and are unaffected.
+
 ---
 
 ## 18. API Reference Summary
@@ -664,7 +695,7 @@ The public feedback form (`/`, `POST /api/feedback`, `GET /feedback/<token>`) is
 | `GET` | `/api/feedback` | List with `from`, `to`, `sentiment`, `serviceType` filters (`eventName` accepted as legacy alias) *(admin session)* |
 | `GET` | `/api/stats` | Dashboard stats (`from`, `to`) *(admin session)* |
 | `POST` | `/api/reports/combined` | Date-range combined report `{ from, to }` *(admin session)* |
-| `POST` | `/api/clients/bulk-upload` | Bulk-add clients from `.xlsx`/`.csv` upload (multipart field `file`; per-row validation, duplicate-email skip, `{ added, skipped, total }`) *(admin session)* |
+| `POST` | `/api/clients/sync-from-sheet` | Pull clients from the published Google Sheet CSV (`SHEET_CSV_URL`) and upsert by email — `{ inserted, updated, skipped, total }`; clear 400 if `SHEET_CSV_URL` unset or the sheet is empty *(admin session)* |
 | `POST` | `/api/clients/sync` | Google Sheets sync `{ clients: [...] }` — **UPSERT by email** (update existing / insert new), `X-Sync-Secret` header; `{ inserted, updated, skipped, total }` (no admin session needed) |
 | `POST` | `/api/clients` | Add a client (name + valid email required; 400 otherwise) *(admin session)* |
 | `GET` | `/api/clients` | List all clients, newest first *(admin session)* |
@@ -718,7 +749,7 @@ The app is a normal long-running Express server **and** a Vercel serverless func
 - `server/index.js` guards `app.listen()` and `node-cron` with `require.main === module`, so the function only handles requests; cron runs only in long-running mode. Use **Vercel Cron** (or an external cron) hitting `POST /api/cron/monthly-send` and `POST /api/cron/six-month-report` with `x-cron-secret` if `CRON_SECRET` is set.
 - **Database:** SQLite cannot persist on serverless (ephemeral FS; `/tmp` fallback is used when `VERCEL` and no `DB_PATH`). For production set `DATABASE_URL` (Postgres — e.g. Neon/Supabase); `server/db.js` then runs in Postgres mode (same row shapes — column names are normalized), otherwise it uses local `better-sqlite3`.
 - **Reports:** the serverless filesystem is not writable, so `server/storage.js` picks a driver per environment — `disk` (local dev), `supabase` (when `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` are set), or `memory` (Vercel without storage credentials — nothing is written, and `/reports/<file>` regenerates the HTML/PDF on demand from the database). Storage failures never fail a submission — the PDF is always emailed as an in-memory attachment and `pdfUrl` falls back to `/reports/<file>`.
-- Every env var must be added in the Vercel dashboard (Vercel does not read the local `.env`): `GEMINI_API_KEY`, `GEMINI_MODEL`, `SMTP_*`, `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SYNC_SECRET`, `DATABASE_URL`, `PUBLIC_URL`/`APP_BASE_URL` (live domain), `CRON_SECRET`, and optionally `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_REPORTS_BUCKET` (report files on Supabase Storage).
+- Every env var must be added in the Vercel dashboard (Vercel does not read the local `.env`): `GEMINI_API_KEY`, `GEMINI_MODEL`, `SMTP_*`, `ADMIN_EMAIL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `SESSION_SECRET`, `SYNC_SECRET`, `DATABASE_URL`, `PUBLIC_URL`/`APP_BASE_URL` (live domain), `CRON_SECRET`, `SHEET_CSV_URL`, `SHEET_EDIT_URL`, and optionally `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_REPORTS_BUCKET` (report files on Supabase Storage).
 
 ---
 
