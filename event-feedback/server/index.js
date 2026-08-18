@@ -8,7 +8,7 @@ const { analyzeFeedback, analyzeCombined, sentimentColor } = require('./gemini')
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { insertFeedback, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClientAccountManager, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
@@ -218,6 +218,12 @@ app.post('/api/feedback', async (req, res) => {
       hasValidEmail: record.hasValidEmail,
       companyName: record.companyName,
       rating: record.rating,
+      accountManagementScore: record.accountManagementScore,
+      strategyScore: record.strategyScore,
+      creativeScore: record.creativeScore,
+      designContentScore: record.designContentScore,
+      socialContentScore: record.socialContentScore,
+      agencyLeadershipScore: record.agencyLeadershipScore,
       comments: record.comments,
       suggestions: record.suggestions,
       sentiment: record.sentiment,
@@ -242,6 +248,14 @@ app.post('/api/feedback', async (req, res) => {
       month: record.eventDate || null,
       tokenUsed: !!request,
       rating: record.rating,
+      departmentScores: {
+        accountManagementScore: record.accountManagementScore,
+        strategyScore: record.strategyScore,
+        creativeScore: record.creativeScore,
+        designContentScore: record.designContentScore,
+        socialContentScore: record.socialContentScore,
+        agencyLeadershipScore: record.agencyLeadershipScore
+      },
       sentiment: record.sentiment,
       sentimentColor: color,
       urgency: record.urgency,
@@ -255,7 +269,7 @@ app.post('/api/feedback', async (req, res) => {
     });
   } catch (err) {
     console.error('[POST /api/feedback]', err);
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(err.status || 500).json({ ok: false, error: err.message });
   }
 });
 
@@ -293,7 +307,7 @@ function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
 
-const BULK_COLUMNS = { name: 'name', email: 'email', companyname: 'company_name', servicetype: 'service_type', status: 'status' };
+const BULK_COLUMNS = { name: 'name', email: 'email', companyname: 'company_name', servicetype: 'service_type', status: 'status', accountmanager: 'account_manager' };
 
 function mapClientRow(raw) {
   const mapped = {};
@@ -402,7 +416,8 @@ async function syncClientRows(rows) {
       email: mapped.email,
       company_name: mapped.company_name,
       service_type: mapped.service_type,
-      status: (mapped.status || 'active').toLowerCase()
+      status: (mapped.status || 'active').toLowerCase(),
+      account_manager: mapped.account_manager
     });
     if (action === 'inserted') inserted += 1;
     else updated += 1;
@@ -508,7 +523,7 @@ app.post('/api/clients/sync-from-sheet', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, company_name, service_type, status } = req.body || {};
+    const { name, email, company_name, service_type, status, account_manager } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ ok: false, error: 'Name is required.' });
     }
@@ -523,7 +538,8 @@ app.post('/api/clients', async (req, res) => {
       email,
       company_name,
       service_type,
-      status
+      status,
+      account_manager
     });
     res.status(201).json({ ok: true, data: client });
   } catch (err) {
@@ -544,11 +560,22 @@ app.get('/api/clients', async (req, res) => {
 app.patch('/api/clients/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { status } = req.body || {};
-    if (!['active', 'inactive'].includes(status)) {
+    const { status, account_manager } = req.body || {};
+    const hasStatus = status !== undefined;
+    const hasAccountManager = account_manager !== undefined;
+    if (!hasStatus && !hasAccountManager) {
+      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status" and/or "account_manager".' });
+    }
+    if (hasStatus && !['active', 'inactive'].includes(status)) {
       return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
     }
-    const client = await updateClientStatus(id, status);
+    let client = null;
+    if (hasAccountManager) {
+      client = await updateClientAccountManager(id, account_manager);
+    }
+    if (hasStatus) {
+      client = await updateClientStatus(id, status);
+    }
     if (!client) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });
     }
@@ -693,6 +720,48 @@ app.get('/reports/:file', async (req, res) => {
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ---------- Token-based feedback form (Phase 2) ----------
+const RATING_QUESTIONS = [
+  { key: 'accountManagementScore', department: 'Account Management', question: 'How satisfied are you with the responsiveness, communication and overall management of your account?' },
+  { key: 'strategyScore', department: 'Strategy', question: 'How satisfied are you with the quality of strategic thinking, recommendations and strategic direction being provided for your brand?' },
+  { key: 'creativeScore', department: 'Creative', question: 'How satisfied are you with the quality, relevance and originality of the creative ideas and content being developed for your brand?' },
+  { key: 'designContentScore', department: 'Design & Content Production', question: 'How satisfied are you with the quality, consistency and timely delivery of design and content production?' },
+  { key: 'socialContentScore', department: 'Social & Content', question: 'How satisfied are you with the management of your social media platforms, including publishing and community management?' },
+  { key: 'agencyLeadershipScore', department: 'Agency Leadership', question: "Overall, how satisfied are you with Craftsmen Media's performance and the value we are delivering to your business?" }
+];
+
+const SCALE_LABELS = ['Very Poor', 'Poor', 'Satisfactory', 'Good', 'Excellent'];
+const INTRO_TEXT = 'At Craftsmen Media, we take pride in the work we do and believe that great partnerships are built on consistent improvement. Your feedback helps us understand what we are doing well and where we can do better, enabling us to continuously strengthen the quality of our work, service, and partnership with you. We would appreciate a few minutes of your time to share your experience with us over the past month.';
+
+function ratingQuestionsScript() {
+  return `
+    const RATING_QUESTIONS = ${JSON.stringify(RATING_QUESTIONS)};
+    const SCALE_LABELS = ${JSON.stringify(SCALE_LABELS)};
+
+    function ratingOption(n, key) {
+      return '<label class="flex-1 cursor-pointer">' +
+        '<input type="radio" name="' + key + '" value="' + n + '" required class="peer sr-only" />' +
+        '<span class="flex flex-col items-center gap-0.5 rounded-xl border-2 border-gray-200 py-2.5 px-1 text-sm font-bold text-gray-500 transition hover:border-brandDark hover:text-ink peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-ink peer-checked:font-extrabold">' +
+          '<span class="text-lg leading-none">' + n + '</span>' +
+          '<span class="text-[9px] font-semibold leading-tight text-center text-gray-400 peer-checked:text-gray-600">' + SCALE_LABELS[n - 1] + '</span>' +
+        '</span>' +
+      '</label>';
+    }
+
+    function ratingQuestionHtml(q) {
+      const options = [1, 2, 3, 4, 5].map((n) => ratingOption(n, q.key)).join('');
+      return '<div>' +
+        '<p class="text-sm font-extrabold">' + q.department + ' *</p>' +
+        '<p class="text-xs text-gray-500 mb-2">' + q.question + '</p>' +
+        '<div class="flex gap-2">' + options + '</div>' +
+      '</div>';
+    }
+
+    RATING_QUESTIONS.forEach((q) => {
+      document.getElementById('ratingQuestions').insertAdjacentHTML('beforeend', ratingQuestionHtml(q));
+    });
+  `;
+}
+
 function feedbackFormPage(client, request, logoPath) {
   const linkNotice = request ? esc(`Requested for ${request.month}`) : '';
   return `<!DOCTYPE html>
@@ -727,6 +796,11 @@ function feedbackFormPage(client, request, logoPath) {
       <p class="text-xs text-gray-400 mt-2">${linkNotice}</p>
     </div>
 
+    <div class="bg-white border-2 border-brand rounded-3xl shadow-lg p-6 sm:p-8 mb-5 text-sm text-gray-600 leading-relaxed">
+      ${esc(INTRO_TEXT)}
+      <p class="mt-3 text-xs font-bold text-gray-500">Rating scale: 1 – Very Poor &nbsp;·&nbsp; 2 – Poor &nbsp;·&nbsp; 3 – Satisfactory &nbsp;·&nbsp; 4 – Good &nbsp;·&nbsp; 5 – Excellent</p>
+    </div>
+
     <form id="feedbackForm" class="bg-white border-2 border-brand rounded-3xl shadow-lg p-6 sm:p-8 space-y-5">
       <input type="hidden" name="token" value="${esc(request.token)}" />
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -752,22 +826,11 @@ function feedbackFormPage(client, request, logoPath) {
         </div>
       </div>
 
-      <div>
-        <span class="block text-sm font-bold mb-2">Overall Rating *</span>
-        <div id="starRow" class="flex items-center gap-1">
-          <input type="hidden" name="rating" id="rating" value="5" />
-          <button type="button" data-star="1" aria-label="1 star" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
-          <button type="button" data-star="2" aria-label="2 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
-          <button type="button" data-star="3" aria-label="3 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
-          <button type="button" data-star="4" aria-label="4 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
-          <button type="button" data-star="5" aria-label="5 stars" class="star text-4xl leading-none text-gray-200 transition hover:scale-110">★</button>
-          <span id="ratingLabel" class="ml-3 text-sm font-bold text-gray-600">5 / 5</span>
-        </div>
-      </div>
+      <div id="ratingQuestions" class="space-y-5"></div>
 
       <div>
         <label for="comments" class="block text-sm font-bold mb-1.5">Client Feedback </label>
-        <textarea id="comments" name="comments" rows="4" required placeholder="Share your feedback"
+        <textarea id="comments" name="comments" rows="4" placeholder="Share your feedback"
           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"></textarea>
       </div>
 
@@ -798,24 +861,7 @@ function feedbackFormPage(client, request, logoPath) {
   </main>
 
   <script>
-    const starButtons = document.querySelectorAll('.star');
-    const ratingInput = document.getElementById('rating');
-    const ratingLabel = document.getElementById('ratingLabel');
-
-    function paintStars(n) {
-      starButtons.forEach((b, i) => {
-        b.classList.toggle('text-brand', i < n);
-        b.classList.toggle('text-gray-200', i >= n);
-      });
-      ratingInput.value = n;
-      ratingLabel.textContent = n + ' / 5';
-    }
-    starButtons.forEach((b) => {
-      b.addEventListener('click', () => paintStars(Number(b.dataset.star)));
-      b.addEventListener('mouseenter', () => paintStars(Number(b.dataset.star)));
-    });
-    document.getElementById('starRow').addEventListener('mouseleave', () => paintStars(Number(ratingInput.value)));
-    paintStars(5);
+    ${ratingQuestionsScript()}
 
     const form = document.getElementById('feedbackForm');
     const errorEl = document.getElementById('formError');

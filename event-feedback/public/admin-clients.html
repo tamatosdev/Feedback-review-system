@@ -80,6 +80,11 @@
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
+          <label for="accountManager" class="block text-xs font-bold mb-1">Account Manager</label>
+          <input id="accountManager" name="accountManager" type="text" placeholder="e.g. Tahir Raza"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
           <label for="status" class="block text-xs font-bold mb-1">Status</label>
           <select id="status" name="status"
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
@@ -108,6 +113,7 @@
               <th class="px-5 py-3 font-bold">Name</th>
               <th class="px-5 py-3 font-bold">Email</th>
               <th class="px-5 py-3 font-bold">Service Type</th>
+              <th class="px-5 py-3 font-bold">Account Manager</th>
               <th class="px-5 py-3 font-bold">Status</th>
               <th class="px-5 py-3 font-bold">Created</th>
               <th class="px-5 py-3 font-bold">Actions</th>
@@ -156,6 +162,10 @@
           <td class="px-5 py-4 font-bold">${esc(c.name)}<div class="text-xs font-normal text-gray-400">${esc(c.company_name || '—')}</div></td>
           <td class="px-5 py-4 text-gray-600">${esc(c.email)}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.service_type || '—')}</td>
+          <td class="px-5 py-4 text-gray-600">
+            ${esc(c.account_manager || '—')}
+            <button data-action="accountManager" data-id="${c.id}" data-account-manager="${esc(c.account_manager || '')}" class="ml-2 text-xs font-bold text-brandDark underline underline-offset-2 hover:text-ink" title="Edit account manager">edit</button>
+          </td>
           <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${statusClasses[c.status] || 'bg-gray-100 text-gray-600'}">${esc(c.status)}</span></td>
           <td class="px-5 py-4 text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</td>
           <td class="px-5 py-4 whitespace-nowrap space-x-3">
@@ -215,6 +225,26 @@
         const json = await res.json();
         if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to update status.');
         showMessage(`Client "${json.data.name}" is now ${next}.`, false);
+        await loadClients();
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    async function editAccountManager(id, current) {
+      const name = prompt('Account Manager for this client:', current || '');
+      if (name === null) return;
+      const value = name.trim();
+      if (value === current) return;
+      try {
+        const res = await fetch(`/api/clients/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_manager: value })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to update account manager.');
+        showMessage(`Account manager for "${json.data.name}" saved.`, false);
         await loadClients();
       } catch (err) {
         showMessage(err.message, true);
@@ -303,6 +333,7 @@
         email,
         company_name: $('companyName').value.trim(),
         service_type: $('serviceType').value.trim(),
+        account_manager: $('accountManager').value.trim(),
         status: $('status').value
       });
     });
@@ -312,6 +343,7 @@
       if (!btn) return;
       if (btn.dataset.action === 'toggle') toggleClient(btn.dataset.id, btn.dataset.status);
       if (btn.dataset.action === 'delete') deleteClient(btn.dataset.id, btn.dataset.name);
+      if (btn.dataset.action === 'accountManager') editAccountManager(btn.dataset.id, btn.dataset.accountManager);
     });
 
     $('logoutBtn').addEventListener('click', async () => {

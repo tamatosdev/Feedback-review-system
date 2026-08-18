@@ -41,8 +41,25 @@ const COLUMN_ALIASES = {
   company_name: 'company_name',
   service_type: 'service_type',
   sent_at: 'sent_at',
-  submitted: 'submitted'
+  submitted: 'submitted',
+  account_manager: 'account_manager',
+  account_management_score: 'accountManagementScore',
+  strategy_score: 'strategyScore',
+  creative_score: 'creativeScore',
+  design_content_score: 'designContentScore',
+  social_content_score: 'socialContentScore',
+  agency_leadership_score: 'agencyLeadershipScore'
 };
+
+// Six department scores (camelCase form fields) and their DB column names.
+const SCORE_COLUMNS = [
+  ['account_management_score', 'accountManagementScore'],
+  ['strategy_score', 'strategyScore'],
+  ['creative_score', 'creativeScore'],
+  ['design_content_score', 'designContentScore'],
+  ['social_content_score', 'socialContentScore'],
+  ['agency_leadership_score', 'agencyLeadershipScore']
+];
 
 function normalizeRow(row) {
   if (!row) return row;
@@ -116,6 +133,7 @@ const SCHEMA_STATEMENTS = [
     company_name   TEXT,
     service_type   TEXT,
     status         TEXT NOT NULL DEFAULT 'active',
+    account_manager TEXT,
     created_at     TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS feedback_requests (
@@ -138,6 +156,12 @@ const SCHEMA_STATEMENTS = [
     hasValidEmail         INTEGER DEFAULT 0,
     companyName           TEXT,
     rating                INTEGER NOT NULL,
+    account_management_score INTEGER,
+    strategy_score           INTEGER,
+    creative_score           INTEGER,
+    design_content_score     INTEGER,
+    social_content_score     INTEGER,
+    agency_leadership_score  INTEGER,
     comments              TEXT,
     suggestions           TEXT,
     sentiment             TEXT,
@@ -167,6 +191,16 @@ async function migrateRemote() {
   const finalCols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'feedback_reports'");
   if (!finalCols.rows.some((c) => String(c.column_name || '').toLowerCase() === 'client_id')) {
     await pool.query('ALTER TABLE feedback_reports ADD COLUMN client_id INTEGER REFERENCES clients(id)');
+  }
+  const reportCols = new Set(finalCols.rows.map((c) => String(c.column_name || '').toLowerCase()));
+  for (const [col] of SCORE_COLUMNS) {
+    if (!reportCols.has(col)) {
+      await pool.query(`ALTER TABLE feedback_reports ADD COLUMN ${col} INTEGER`);
+    }
+  }
+  const clientCols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'clients'");
+  if (!clientCols.rows.some((c) => String(c.column_name || '').toLowerCase() === 'account_manager')) {
+    await pool.query('ALTER TABLE clients ADD COLUMN account_manager TEXT');
   }
 }
 
@@ -314,6 +348,20 @@ function migrateFeedbackReports(dbHandle = db) {
   if (!finalCols.includes('client_id')) {
     dbHandle.exec('ALTER TABLE feedback_reports ADD COLUMN client_id INTEGER REFERENCES clients(id)');
   }
+  for (const [col] of SCORE_COLUMNS) {
+    if (!finalCols.includes(col)) {
+      dbHandle.exec(`ALTER TABLE feedback_reports ADD COLUMN ${col} INTEGER`);
+    }
+  }
+  // Clients table may not exist in some minimal test fixtures; only migrate
+  // when it does.
+  const hasClients = dbHandle.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'clients'").get();
+  if (hasClients) {
+    const clientCols = dbHandle.prepare('PRAGMA table_info(clients)').all().map((c) => c.name);
+    if (!clientCols.includes('account_manager')) {
+      dbHandle.exec('ALTER TABLE clients ADD COLUMN account_manager TEXT');
+    }
+  }
 }
 
 async function insertFeedback(row) {
@@ -321,16 +369,21 @@ async function insertFeedback(row) {
     INSERT INTO feedback_reports (
       submissionId, timestamp, serviceType, month, client_id, attendeeName, attendeeEmail,
       hasValidEmail, companyName, rating, comments, suggestions,
-      sentiment, summary, urgency, highlights, improvementSuggestions, pdfUrl, emailSent, created_at
+      sentiment, summary, urgency, highlights, improvementSuggestions, pdfUrl, emailSent, created_at,
+      account_management_score, strategy_score, creative_score, design_content_score,
+      social_content_score, agency_leadership_score
     ) VALUES (
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+      ?, ?, ?, ?, ?, ?
     )
   `, [
     row.submissionId, row.timestamp, row.serviceType, row.month ?? null, row.client_id ?? null,
     row.attendeeName, row.attendeeEmail, row.hasValidEmail ? 1 : 0, row.companyName, row.rating,
     row.comments, row.suggestions, row.sentiment, row.summary, row.urgency,
     JSON.stringify(row.highlights || []), JSON.stringify(row.improvementSuggestions || []),
-    row.pdfUrl ?? '', row.emailSent ? 1 : 0, new Date().toISOString()
+    row.pdfUrl ?? '', row.emailSent ? 1 : 0, new Date().toISOString(),
+    row.accountManagementScore ?? null, row.strategyScore ?? null, row.creativeScore ?? null,
+    row.designContentScore ?? null, row.socialContentScore ?? null, row.agencyLeadershipScore ?? null
   ]);
 }
 
@@ -424,10 +477,10 @@ async function stats({ from, to } = {}) {
 
 // ---------- Clients ----------
 
-async function insertClient({ name, email, company_name = '', service_type = '', status = 'active' }) {
+async function insertClient({ name, email, company_name = '', service_type = '', status = 'active', account_manager = '' }) {
   return runReturning(`
-    INSERT INTO clients (name, email, company_name, service_type, status, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO clients (name, email, company_name, service_type, status, account_manager, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING *
   `, [
     String(name || '').trim(),
@@ -435,6 +488,7 @@ async function insertClient({ name, email, company_name = '', service_type = '',
     String(company_name || '').trim(),
     String(service_type || '').trim(),
     status === 'inactive' ? 'inactive' : 'active',
+    String(account_manager || '').trim() || null,
     new Date().toISOString()
   ]);
 }
@@ -461,16 +515,24 @@ async function updateClientStatus(id, status) {
   return row || null;
 }
 
-async function upsertClientByEmail({ name, email, company_name = '', service_type = '', status = 'active' }) {
+async function updateClientAccountManager(id, accountManager) {
+  const row = await runReturning(
+    'UPDATE clients SET account_manager = ? WHERE id = ? RETURNING *',
+    [String(accountManager || '').trim() || null, id]
+  );
+  return row || null;
+}
+
+async function upsertClientByEmail({ name, email, company_name = '', service_type = '', status = 'active', account_manager = '' }) {
   const existing = await getRow('SELECT * FROM clients WHERE lower(email) = lower(?)', [email]);
   if (existing) {
     const row = await runReturning(
-      'UPDATE clients SET name = ?, company_name = ?, service_type = ?, status = ? WHERE id = ? RETURNING *',
-      [name, company_name, service_type, status, existing.id]
+      'UPDATE clients SET name = ?, company_name = ?, service_type = ?, status = ?, account_manager = ? WHERE id = ? RETURNING *',
+      [name, company_name, service_type, status, String(account_manager || '').trim() || existing.account_manager || null, existing.id]
     );
     return { action: 'updated', row };
   }
-  return { action: 'inserted', row: await insertClient({ name, email, company_name, service_type, status }) };
+  return { action: 'inserted', row: await insertClient({ name, email, company_name, service_type, status, account_manager }) };
 }
 
 async function deleteClient(id) {
@@ -528,6 +590,7 @@ module.exports = {
   listClients,
   listClientEmails,
   updateClientStatus,
+  updateClientAccountManager,
   upsertClientByEmail,
   deleteClient,
   insertFeedbackRequest,

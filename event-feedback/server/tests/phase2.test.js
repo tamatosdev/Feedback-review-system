@@ -107,9 +107,13 @@ test('queryFeedbackByMonth filters by YYYY-MM range', async () => {
   assert.strictEqual(inRange[0].submissionId, 'FB-TEST1');
 });
 
-test('migrateFeedbackReports renames legacy columns on an old-schema database', () => {
+test('migrateFeedbackReports renames legacy columns and adds department scores + account_manager', () => {
   const oldDb = new Database(':memory:');
   oldDb.exec(`
+    CREATE TABLE clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, email TEXT NOT NULL,
+      company_name TEXT, service_type TEXT, status TEXT NOT NULL DEFAULT 'active', created_at TEXT
+    );
     CREATE TABLE feedback_reports (
       submissionId TEXT PRIMARY KEY, timestamp TEXT NOT NULL, eventName TEXT NOT NULL,
       eventDate TEXT, attendeeName TEXT, rating INTEGER NOT NULL
@@ -122,13 +126,25 @@ test('migrateFeedbackReports renames legacy columns on an old-schema database', 
   assert.ok(cols.includes('serviceType'));
   assert.ok(cols.includes('month'));
   assert.ok(cols.includes('client_id'));
+  assert.ok(cols.includes('account_management_score'));
+  assert.ok(cols.includes('strategy_score'));
+  assert.ok(cols.includes('creative_score'));
+  assert.ok(cols.includes('design_content_score'));
+  assert.ok(cols.includes('social_content_score'));
+  assert.ok(cols.includes('agency_leadership_score'));
   assert.ok(!cols.includes('eventName'));
   assert.ok(!cols.includes('eventDate'));
+
+  const clientCols = oldDb.prepare('PRAGMA table_info(clients)').all().map((c) => c.name);
+  assert.ok(clientCols.includes('account_manager'));
 
   const row = oldDb.prepare('SELECT * FROM feedback_reports').get();
   assert.strictEqual(row.serviceType, 'Product Launch 2026');
   assert.strictEqual(row.month, '2026-08-10');
   assert.strictEqual(row.client_id, null);
+  assert.strictEqual(row.account_management_score, null, 'legacy rows get null department scores');
+  assert.strictEqual(row.agency_leadership_score, null);
+  assert.strictEqual(row.rating, 5, 'legacy rating is preserved');
   oldDb.close();
 });
 

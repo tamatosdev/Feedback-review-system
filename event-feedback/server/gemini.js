@@ -4,6 +4,22 @@ const { GoogleGenAI } = require('@google/genai');
 // Override with GEMINI_MODEL in .env if needed.
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.6-flash';
 
+// Old submissions (single rating only) have null department scores.
+function fmtScore(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 5 ? `${value}/5` : 'n/a';
+}
+
+function departmentScoresLine(data) {
+  return [
+    `Account Management: ${fmtScore(data.accountManagementScore)}`,
+    `Strategy: ${fmtScore(data.strategyScore)}`,
+    `Creative: ${fmtScore(data.creativeScore)}`,
+    `Design & Content Production: ${fmtScore(data.designContentScore)}`,
+    `Social & Content: ${fmtScore(data.socialContentScore)}`,
+    `Agency Leadership (Overall): ${fmtScore(data.agencyLeadershipScore)}`
+  ].join('\n');
+}
+
 const PROMPT_TEMPLATE = (data) => `You are a client feedback analyst. Analyze the following client feedback and return STRICTLY valid JSON with exactly these keys and no other text, no markdown fences, no explanation:
 
 {
@@ -17,6 +33,8 @@ const PROMPT_TEMPLATE = (data) => `You are a client feedback analyst. Analyze th
 Feedback:
 Project Name / Service Name: ${data.eventName}
 Overall Rating: ${data.rating}/5
+Department Ratings:
+${departmentScoresLine(data)}
 Client Feedback/Comments: ${data.comments}
 Suggestions/Recommendations: ${data.suggestions}`;
 
@@ -112,7 +130,12 @@ async function analyzeFeedback(data, { apiKey } = {}) {
 
 async function analyzeCombined(feedbackRows, { apiKey } = {}) {
   const input = feedbackRows
-    .map((f, i) => `#${i + 1} Project/Service: ${f.eventName} | Overall Rating: ${f.rating}/5 | Client Feedback: ${f.comments} | Suggestions: ${f.suggestions}`)
+    .map((f, i) => {
+      const scores = f.agencyLeadershipScore != null
+        ? ` | Department Scores: AM ${fmtScore(f.accountManagementScore)}, ST ${fmtScore(f.strategyScore)}, CR ${fmtScore(f.creativeScore)}, DC ${fmtScore(f.designContentScore)}, SC ${fmtScore(f.socialContentScore)}, AL ${fmtScore(f.agencyLeadershipScore)}`
+        : '';
+      return `#${i + 1} Project/Service: ${f.eventName} | Overall Rating: ${f.rating}/5${scores} | Client Feedback: ${f.comments} | Suggestions: ${f.suggestions}`;
+    })
     .join('\n');
 
   const prompt = `You are a client analytics analyst. Analyze the following batch of ${feedbackRows.length} client feedback submissions. Return STRICTLY valid JSON with exactly these keys and no other text, no markdown, no explanation:

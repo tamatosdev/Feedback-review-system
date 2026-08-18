@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { DEPARTMENT_SCORES, scoreText } = require('./report');
 
 function createTransport(config) {
   return nodemailer.createTransport({
@@ -13,11 +14,18 @@ function createTransport(config) {
 }
 
 function feedbackEmailBody(record, pdfUrl) {
+  const departmentLines = DEPARTMENT_SCORES
+    .map(([key, label]) => `  ${label}: ${scoreText(record[key])}`)
+    .join('\n');
   return [
     `New client feedback received.`,
     ``,
     `Project Name / Service Name: ${record.eventName}`,
     `Overall Rating: ${record.rating}/5`,
+    ``,
+    `Department Ratings:`,
+    departmentLines,
+    ``,
     `Sentiment: ${record.sentiment}`,
     `Urgency: ${record.urgency}`,
     ``,
@@ -130,4 +138,4 @@ async function sendNoFeedbackEmail(config, from, to) {
   return info;
 }
 
-module.exports = { sendFeedbackEmail, sendCombinedEmail, sendClientFeedbackRequest, sendNoFeedbackEmail, clientFeedbackRequestBody };
+module.exports = { sendFeedbackEmail, sendCombinedEmail, sendClientFeedbackRequest, sendNoFeedbackEmail, clientFeedbackRequestBody, feedbackEmailBody };

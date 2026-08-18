@@ -35,6 +35,26 @@ function badgeRow(sentiment) {
   return `<tr><td style="padding:8px 12px;font-weight:700;color:${BLACK};width:220px;background:#f9fafb">Sentiment</td><td style="padding:8px 12px;color:${BLACK}">${badge(sentiment)}</td></tr>`;
 }
 
+// The six department scores (camelCase record keys -> display labels).
+const DEPARTMENT_SCORES = [
+  ['accountManagementScore', 'Account Management'],
+  ['strategyScore', 'Strategy'],
+  ['creativeScore', 'Creative'],
+  ['designContentScore', 'Design & Content Production'],
+  ['socialContentScore', 'Social & Content'],
+  ['agencyLeadershipScore', 'Agency Leadership (Overall)']
+];
+
+// Old submissions (rating only) have null department scores -> "N/A".
+function scoreText(value) {
+  return Number.isInteger(value) && value >= 1 && value <= 5 ? `${value} / 5` : 'N/A';
+}
+
+function departmentScoresTable(record) {
+  const rows = DEPARTMENT_SCORES.map(([key, label]) => infoRow(label, scoreText(record[key]))).join('');
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">${rows}</table>`;
+}
+
 function reportHTML(record, logoPath) {
   const hasEmail = record.attendeeEmail && record.hasValidEmail !== false;
   const logo = logoPath
@@ -66,6 +86,9 @@ function reportHTML(record, logoPath) {
           ${infoRow('Overall Rating', `${record.rating} / 5`)}
           ${badgeRow(record.sentiment)}
         </table>
+
+        <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">DEPARTMENT RATINGS</h2>
+        ${departmentScoresTable(record)}
 
         <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">CLIENT INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
@@ -108,16 +131,22 @@ function combinedHTML(meta, rows, logoPath) {
     ? `<img src="${logoPath}" alt="Logo" width="64" style="vertical-align:middle;margin-right:12px"/>`
     : '';
 
-  const sections = rows.map((r, i) => `
+  const sections = rows.map((r, i) => {
+    const scoresLine = r.agencyLeadershipScore != null
+      ? `<div style="margin-top:6px;color:#374151;font-size:12px">${DEPARTMENT_SCORES.map(([k, l]) => `${esc(l)}: ${scoreText(r[k])}`).join('  ·  ')}</div>`
+      : '';
+    return `
     <tr><td style="padding:22px 0 6px">
       <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1} – ${esc(r.serviceType || r.eventName)}</h3>
       <span style="color:#6b7280;font-size:12px">${esc(r.attendeeName)} · ${esc(r.month || r.eventDate)} · ${esc(r.submissionId)}</span>
       <div style="margin-top:8px">${stars(r.rating)} &nbsp; ${badge(r.sentiment)}</div>
+      ${scoresLine}
     </td></tr>
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Summary:</strong> ${esc(r.summary)}</td></tr>
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Highlights:</strong> ${esc(r.highlights.join('; '))}</td></tr>
     <tr><td style="padding:4px 0;color:${BLACK}"><strong>Improvement Suggestions:</strong> ${esc(r.improvementSuggestions.join('; '))}</td></tr>
-    <tr><td style="padding:4px 0 10px;color:${BLACK}"><strong>Original client feedback:</strong> ${esc(r.comments)}</td></tr>`).join('');
+    <tr><td style="padding:4px 0 10px;color:${BLACK}"><strong>Original client feedback:</strong> ${esc(r.comments)}</td></tr>`;
+  }).join('');
 
   const b = meta.overallSentimentBreakdown;
   const total = Math.max(1, b.positive + b.neutral + b.negative);
@@ -164,4 +193,4 @@ function combinedHTML(meta, rows, logoPath) {
 </html>`;
 }
 
-module.exports = { reportHTML, combinedHTML, stars, badge, esc };
+module.exports = { reportHTML, combinedHTML, stars, badge, esc, DEPARTMENT_SCORES, scoreText };

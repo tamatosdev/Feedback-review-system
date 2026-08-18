@@ -2,6 +2,8 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
+const { DEPARTMENT_SCORES, scoreText } = require('./report');
+
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
 const MARGIN = 48;
@@ -185,6 +187,9 @@ function writeFeedbackSection(doc, r, index, fullPage = true) {
     ['Urgency', r.urgency]
   ]);
   drawBadge(doc, r.sentiment);
+
+  sectionHeading(doc, 'Department Ratings');
+  infoTable(doc, DEPARTMENT_SCORES.map(([key, label]) => [label, scoreText(r[key])]));
 
   sectionHeading(doc, 'Client Information');
   infoTable(doc, [
