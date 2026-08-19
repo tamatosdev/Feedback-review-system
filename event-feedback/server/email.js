@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { DEPARTMENT_SCORES, scoreText } = require('./report');
+const { DEPARTMENT_SCORES, scoreText, esc } = require('./report');
 
 function createTransport(config) {
   return nodemailer.createTransport({
@@ -138,4 +138,113 @@ async function sendNoFeedbackEmail(config, from, to) {
   return info;
 }
 
-module.exports = { sendFeedbackEmail, sendCombinedEmail, sendClientFeedbackRequest, sendNoFeedbackEmail, clientFeedbackRequestBody, feedbackEmailBody };
+// ---------- Phase 3: automated alert emails ----------
+
+function wrapAlertContent(title, lines) {
+  const text = [title, '', ...lines, '', '— PureDesigners Client Feedback System'].join('\n');
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
+    `<p style="font-weight:bold;font-size:16px;margin:0 0 10px">${esc(title)}</p>` +
+    lines.map((l) => `<p style="margin:0 0 6px">${l ? esc(l) : '&nbsp;'}</p>`).join('') +
+    `<p style="margin:16px 0 0;color:#6b7280;font-size:12px">— PureDesigners Client Feedback System</p></div>`;
+  return { text, html };
+}
+
+function lowScoreAlertContent({ client, score, month, threshold, dashboardUrl }) {
+  const subject = `ALERT: Low overall score — ${client.name} (${score}/5)`;
+  return { subject, ...wrapAlertContent(subject, [
+    `Client: ${client.name} (${client.email || 'no email'})`,
+    `Overall rating (Agency Leadership): ${score}/5 — below the ${threshold} threshold.`,
+    `Month: ${month}`,
+    `Service: ${client.service_type || 'General'}`,
+    ``,
+    `Dashboard: ${dashboardUrl}`
+  ]) };
+}
+
+function lowDepartmentAlertContent({ departmentLabel, avg, month, threshold, dashboardUrl }) {
+  const subject = `ALERT: ${departmentLabel} average below ${threshold} (${avg.toFixed(2)}) — ${month}`;
+  return { subject, ...wrapAlertContent(subject, [
+    `Department: ${departmentLabel}`,
+    `Average rating for ${month}: ${avg.toFixed(2)} — below the ${threshold} threshold.`,
+    ``,
+    `Dashboard: ${dashboardUrl}`
+  ]) };
+}
+
+function momDropAlertContent({ client, month, previousScore, previousMonth, currentScore, drop, threshold, dashboardUrl }) {
+  const subject = `ALERT: Score drop for ${client.name} (${previousScore} → ${currentScore}) — ${month}`;
+  return { subject, ...wrapAlertContent(subject, [
+    `Client: ${client.name} (${client.email || 'no email'})`,
+    `Agency Leadership score ${previousMonth}: ${previousScore}/5`,
+    `Agency Leadership score ${month}: ${currentScore}/5`,
+    `Drop: ${drop} point(s) — meets the ${threshold} drop threshold.`,
+    ``,
+    `Dashboard: ${dashboardUrl}`
+  ]) };
+}
+
+function escalationAlertContent({ client, score, month, streak, months, threshold, dashboardUrl }) {
+  const subject = `ESCALATION: ${client.name} below ${threshold} for ${streak} consecutive months`;
+  return { subject, ...wrapAlertContent(subject, [
+    `Client: ${client.name} (${client.email || 'no email'})`,
+    `Consecutive months below ${threshold}: ${streak}`,
+    `Months: ${months.join(', ')}`,
+    `Latest Agency Leadership score (${month}): ${score}/5`,
+    ``,
+    `Dashboard: ${dashboardUrl}`
+  ]) };
+}
+
+function noResponseClientReminderContent({ name, company_name, service_type }, month, days, link) {
+  const company = company_name || name || 'your service';
+  const subject = `Reminder: Monthly feedback for ${company} (${month})`;
+  return { subject, ...wrapAlertContent(subject, [
+    `Hi ${name},`,
+    ``,
+    `We sent you a short feedback form for ${service_type || 'our service'} ${days} day${days === 1 ? '' : 's'} ago and haven't heard back yet — your answers help us keep improving.`,
+    ``,
+    `It only takes about a minute:`,
+    link,
+    ``,
+    `Thanks for your time!`
+  ]) };
+}
+
+function noResponseInternalAlertContent({ name, email }, month, days, dashboardUrl) {
+  const subject = `ALERT: No response — ${name} (${month}, ${days} day${days === 1 ? '' : 's'})`;
+  return { subject, ...wrapAlertContent(subject, [
+    `Client: ${name} (${email || 'no email'})`,
+    `Monthly feedback link sent for ${month}, no submission after ${days} day${days === 1 ? '' : 's'}.`,
+    ``,
+    `A reminder has been sent to the client.`,
+    `Dashboard: ${dashboardUrl}`
+  ]) };
+}
+
+async function sendAlertEmail(config, { to, subject, text, html }) {
+  const mailer = createTransport(config);
+  const info = await mailer.sendMail({
+    from: `"Client Feedback" <${config.smtpUser}>`,
+    to,
+    subject,
+    text,
+    html
+  });
+  return info;
+}
+
+module.exports = {
+  sendFeedbackEmail,
+  sendCombinedEmail,
+  sendClientFeedbackRequest,
+  sendNoFeedbackEmail,
+  clientFeedbackRequestBody,
+  feedbackEmailBody,
+  sendAlertEmail,
+  lowScoreAlertContent,
+  lowDepartmentAlertContent,
+  momDropAlertContent,
+  escalationAlertContent,
+  noResponseClientReminderContent,
+  noResponseInternalAlertContent
+};

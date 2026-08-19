@@ -13,6 +13,7 @@ const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./stora
 const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
+const { evaluateSubmissionAlerts, runNoResponseCheck } = require('./alerts');
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
@@ -171,7 +172,13 @@ app.post('/api/feedback', async (req, res) => {
     const cleaned = cleanData(body);
 
     if (client) {
-      cleaned.eventName = client.service_type || cleaned.eventName;
+      const service = String(client.service_type || '').trim();
+      if (service) {
+        cleaned.eventName = service;
+      } else {
+        cleaned.eventName = 'General';
+        console.warn(`[feedback] client ${client.id} (${client.email || 'no email'}) has no service_type set — submission stored under "General". Fill it in via Manage Clients.`);
+      }
     }
     if (request) {
       cleaned.eventDate = request.month;
@@ -241,6 +248,16 @@ app.post('/api/feedback', async (req, res) => {
       await markFeedbackRequestSubmitted(request.id);
     }
 
+    let alertResults = { evaluated: false, sent: [], skipped: [] };
+    if (client) {
+      try {
+        alertResults = await evaluateSubmissionAlerts({ client, record, smtpConfig, appBaseUrl: APP_BASE_URL });
+      } catch (err) {
+        console.error('[Alerts] evaluation failed (submission unaffected):', err.message);
+        alertResults = { evaluated: false, error: err.message, sent: [], skipped: [] };
+      }
+    }
+
     res.status(201).json({
       ok: true,
       submissionId: record.submissionId,
@@ -265,6 +282,7 @@ app.post('/api/feedback', async (req, res) => {
       usedAi,
       emailSent: record.emailSent,
       emailError,
+      alerts: alertResults,
       pdfUrl: record.pdfUrl,
       pdfFileName,
       pdfSize: saved.size
@@ -856,11 +874,6 @@ function feedbackFormPage(client, request, logoPath) {
       <input type="hidden" name="token" value="${esc(request.token)}" />
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
         <div>
-          <label for="eventName" class="block text-sm font-bold mb-1.5">Service</label>
-          <input id="eventName" name="eventName" type="text" value="${esc(client.service_type || '')}" readonly
-            class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm focus:outline-none" />
-        </div>
-        <div>
           <label for="companyName" class="block text-sm font-bold mb-1.5">Company Name <span class="text-gray-400 font-normal">(Optional)</span></label>
           <input id="companyName" name="companyName" type="text" value="${esc(client.company_name || '')}" placeholder="Enter company name"
             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
@@ -1005,6 +1018,7 @@ app.get('/feedback/:token', async (req, res) => {
 // ---------- Cron: monthly send + 6-month report (Phase 2) ----------
 const MONTHLY_SEND_CRON = process.env.MONTHLY_SEND_CRON || '0 9 1 * *';
 const SIX_MONTH_REPORT_CRON = process.env.SIX_MONTH_REPORT_CRON || '0 9 1 1,7 *';
+const NO_RESPONSE_CHECK_CRON = process.env.NO_RESPONSE_CHECK_CRON || '0 10 * * *';
 
 function runMonthlySend() {
   return sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl: APP_BASE_URL })
@@ -1014,6 +1028,11 @@ function runMonthlySend() {
 function runSixMonthReport() {
   return generateSixMonthReport({ smtpConfig, geminiApiKey, reportUrl, savePdf, saveHtml, fallbackReportUrl })
     .catch((err) => console.error('[Cron] six-month report failed:', err));
+}
+
+function runNoResponseCheckJob() {
+  return runNoResponseCheck({ smtpConfig, appBaseUrl: APP_BASE_URL })
+    .catch((err) => console.error('[Cron] no-response check failed:', err));
 }
 
 // NOTE: node-cron is scheduled below, only when running as a long-lived
@@ -1051,6 +1070,15 @@ app.post('/api/cron/six-month-report', requireCronSecret, async (req, res) => {
   }
 });
 
+app.post('/api/cron/no-response-check', requireCronSecret, async (req, res) => {
+  try {
+    const result = await runNoResponseCheckJob();
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 app.get('/api/health', async (req, res) => {
   try {
     const db = await pingDb();
@@ -1070,6 +1098,7 @@ app.get('/api/health', async (req, res) => {
 if (require.main === module) {
   cron.schedule(MONTHLY_SEND_CRON, () => runMonthlySend());
   cron.schedule(SIX_MONTH_REPORT_CRON, () => runSixMonthReport());
+  cron.schedule(NO_RESPONSE_CHECK_CRON, () => runNoResponseCheckJob());
 
   app.listen(PORT, () => {
     console.log(`Client Feedback System running at ${PUBLIC_URL}`);
@@ -1077,6 +1106,7 @@ if (require.main === module) {
     console.log(`  SMTP:   ${smtpConfig.smtpPass ? 'configured' : 'NOT configured (emails skipped)'}`);
     console.log(`  Cron monthly send:     "${MONTHLY_SEND_CRON}" (sendMonthlyFeedbackForms)`);
     console.log(`  Cron 6-month report:   "${SIX_MONTH_REPORT_CRON}" (generateSixMonthReport)`);
+    console.log(`  Cron no-response:      "${NO_RESPONSE_CHECK_CRON}" (runNoResponseCheck)`);
     if (ADMIN_AUTH_ENABLED) {
       console.log('  Admin auth:           Session login ENABLED (ADMIN_USERNAME / ADMIN_PASSWORD / SESSION_SECRET)');
     } else {

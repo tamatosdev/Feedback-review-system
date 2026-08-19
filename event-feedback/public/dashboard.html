@@ -853,6 +853,12 @@
       renderSentButtons();
       populateQuarterOptions();
       await loadMeta();
+      const params = new URLSearchParams(location.search);
+      const clientId = params.get('client');
+      if (clientId) {
+        $('clientSel').value = clientId;
+        state.client = clientId;
+      }
       const def = computeRange('currm');
       $('filterFrom').value = def.from;
       $('filterTo').value = def.to;

@@ -172,6 +172,16 @@ const SCHEMA_STATEMENTS = [
     pdfUrl                TEXT,
     emailSent             INTEGER DEFAULT 0,
     created_at            TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS alert_log (
+    id         ${ID_TYPE},
+    alert_type TEXT NOT NULL,
+    client_id  INTEGER,
+    department TEXT,
+    period     TEXT NOT NULL,
+    detail     TEXT,
+    dedup_key  TEXT NOT NULL UNIQUE,
+    created_at TEXT
   )`
 ];
 
@@ -566,6 +576,27 @@ async function markFeedbackRequestSubmitted(id) {
   return info.changes > 0;
 }
 
+// ---------- Alert dedup log (Phase 3) ----------
+// Each alert event has a unique dedup_key (type|client|department|period) so
+// an alert fires at most once per event, in both SQLite and Postgres.
+
+async function insertAlertLog({ alertType, clientId = null, department = '', period, detail = '' }) {
+  const dedupKey = `${alertType}|${clientId || 0}|${String(department || '').toLowerCase()}|${period}`;
+  await ensureSchema();
+  const sql = `INSERT INTO alert_log (alert_type, client_id, department, period, detail, dedup_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+  const args = [alertType, clientId, department || null, period, detail, dedupKey, new Date().toISOString()];
+  if (PG_MODE) {
+    const result = await pool.query(toPg(sql) + ' ON CONFLICT (dedup_key) DO NOTHING', args);
+    return { created: result.rowCount > 0, dedupKey };
+  }
+  const info = db.prepare(sql + ' ON CONFLICT (dedup_key) DO NOTHING').run(...args);
+  return { created: info.changes > 0, dedupKey };
+}
+
+async function deleteAlertLog(dedupKey) {
+  await run('DELETE FROM alert_log WHERE dedup_key = ?', [dedupKey]);
+}
+
 // Eager schema setup at module load (synchronous for local SQLite; the
 // resolved promise is shared with every subsequent query). Failures are
 // caught and retried per-request — they never crash the process.
@@ -597,5 +628,7 @@ module.exports = {
   deleteClient,
   insertFeedbackRequest,
   findFeedbackRequestByToken,
-  markFeedbackRequestSubmitted
+  markFeedbackRequestSubmitted,
+  insertAlertLog,
+  deleteAlertLog
 };
