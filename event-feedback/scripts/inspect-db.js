@@ -1,0 +1,12 @@
+const Database = require('better-sqlite3');
+const db = new Database(process.argv[2] || 'data/feedback.db', { readonly: true });
+console.log('tables:', db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r => r.name).join(', '));
+console.log('clients:', db.prepare('SELECT COUNT(*) c FROM clients').get().c);
+console.log('reports:', db.prepare('SELECT COUNT(*) c FROM feedback_reports').get().c);
+console.log('requests:', db.prepare('SELECT COUNT(*) c FROM feedback_requests').get().c);
+console.log('reports rows:');
+console.table(db.prepare('SELECT submissionId, month, serviceType, client_id, agency_leadership_score, account_management_score, strategy_score, creative_score, design_content_score, social_content_score FROM feedback_reports ORDER BY month').all());
+console.log('clients rows:');
+console.table(db.prepare('SELECT id, name, email, account_manager, status FROM clients').all());
+console.log('requests rows:');
+console.table(db.prepare('SELECT id, client_id, month, submitted, sent_at FROM feedback_requests ORDER BY month').all());

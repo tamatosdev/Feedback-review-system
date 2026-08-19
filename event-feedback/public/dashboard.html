@@ -58,6 +58,30 @@
         </div>
       </div>
 
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="block text-xs font-bold mb-2">Quarter</label>
+          <select id="quarterSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-2">Client</label>
+          <select id="clientSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-2">Account Manager</label>
+          <select id="amSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-bold mb-2">Rating / Status</label>
+          <select id="statusSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
+        </div>
+      </div>
+
+      <div class="max-w-xs">
+        <label class="block text-xs font-bold mb-2">Department <span class="font-normal text-gray-400">(shows department view)</span></label>
+        <select id="deptSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
+      </div>
+
       <div>
         <label class="block text-xs font-bold mb-2">Project / Service Name</label>
         <div id="serviceBtns" class="flex flex-wrap gap-2"></div>
@@ -78,10 +102,81 @@
       <p id="combinedResult" class="hidden text-sm font-semibold"></p>
     </section>
 
-    <!-- Stats -->
+    <!-- Top-level KPI cards -->
+    <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-extrabold">Performance Overview</h2>
+        <span id="kpiRangeLabel" class="text-xs font-bold text-gray-400"></span>
+      </div>
+      <div id="kpiCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"></div>
+      <p id="kpiEmpty" class="hidden text-center text-gray-400 text-sm py-6">No data for this period.</p>
+    </section>
+
+    <!-- Comparisons -->
+    <section id="cmpSection" class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-extrabold">Comparisons</h2>
+        <span class="text-xs font-bold text-gray-400">Relative to the selected period</span>
+      </div>
+      <div id="cmpCards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4"></div>
+      <div id="cmpTableWrap"></div>
+      <p id="cmpEmpty" class="hidden text-center text-gray-400 text-sm py-6">No data for this period.</p>
+    </section>
+
+    <!-- Department view -->
+    <section id="deptSection" class="hidden bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <h2 id="deptTitle" class="font-extrabold"></h2>
+        <span id="deptRangeLabel" class="text-xs font-bold text-gray-400"></span>
+      </div>
+      <div id="deptCards" class="grid grid-cols-2 lg:grid-cols-4 gap-4"></div>
+      <div class="grid lg:grid-cols-2 gap-4 mt-4">
+        <div class="border border-gray-100 rounded-2xl p-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">6-Month Trend</p>
+          <div id="deptTrendChart"></div>
+        </div>
+        <div class="border border-gray-100 rounded-2xl p-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-gray-400 mb-2">Department vs Agency Average</p>
+          <div id="deptVsAgency"></div>
+        </div>
+      </div>
+      <div class="mt-6">
+        <div class="flex items-center justify-between">
+          <h3 class="font-extrabold text-sm">Client-wise Scores — <span id="deptClientCount"></span></h3>
+          <span class="text-xs text-gray-400">Click a column header to sort</span>
+        </div>
+        <div class="overflow-x-auto mt-2">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+              <tr>
+                <th data-sort="name" class="px-5 py-3 font-bold cursor-pointer hover:text-ink">Client</th>
+                <th data-sort="avg" class="px-5 py-3 font-bold cursor-pointer hover:text-ink">Average</th>
+                <th data-sort="count" class="px-5 py-3 font-bold cursor-pointer hover:text-ink">Submissions</th>
+                <th data-sort="latest" class="px-5 py-3 font-bold cursor-pointer hover:text-ink">Latest</th>
+                <th class="px-5 py-3 font-bold">Client Status</th>
+              </tr>
+            </thead>
+            <tbody id="deptClientBody" class="divide-y divide-gray-100"></tbody>
+          </table>
+        </div>
+        <p id="deptClientsEmpty" class="hidden text-center text-gray-400 text-sm py-8">No data for this period.</p>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4 mt-6">
+        <div>
+          <h3 class="font-extrabold text-sm mb-2">Highest-rated Clients</h3>
+          <div id="deptTop" class="space-y-2"></div>
+        </div>
+        <div>
+          <h3 class="font-extrabold text-sm mb-2">Lowest-rated Clients</h3>
+          <div id="deptBottom" class="space-y-2"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats (existing) -->
     <section class="grid grid-cols-2 md:grid-cols-5 gap-4" id="statCards"></section>
 
-    <!-- Table -->
+    <!-- Table (existing) -->
     <section class="bg-white border border-gray-100 rounded-2xl shadow-md overflow-hidden">
       <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
         <h2 class="font-extrabold">All Feedback</h2>
@@ -112,9 +207,13 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
-    const state = { service: '', sentiment: '', range: 'alltime' };
+    const state = { service: '', sentiment: '', range: 'currm', client: '', accountManager: '', status: '', department: '' };
+    let meta = { departments: [], clients: [], accountManagers: [] };
+    let deptData = null;
+    let deptSort = { key: 'name', dir: 1 };
 
     const RANGES = [
+      { key: 'currm', label: 'This Month' },
       { key: '1m', label: '1 Month' },
       { key: '3m', label: '3 Months' },
       { key: '6m', label: '6 Months' },
@@ -127,6 +226,30 @@
       { key: 'Neutral', label: 'Neutral', active: 'bg-orange-500 text-white border-orange-500' },
       { key: 'Negative', label: 'Negative', active: 'bg-red-600 text-white border-red-600' }
     ];
+    const STATUS_OPTIONS = [
+      { key: '', label: 'All statuses' },
+      { key: 'healthy', label: 'Healthy' },
+      { key: 'attention', label: 'Attention Required' },
+      { key: 'corrective', label: 'Corrective Action Required' }
+    ];
+    const DEPT_LABELS = {
+      accountManagementScore: 'Account Management',
+      strategyScore: 'Strategy',
+      creativeScore: 'Creative',
+      designContentScore: 'Design & Content Production',
+      socialContentScore: 'Social & Content',
+      agencyLeadershipScore: 'Agency Leadership'
+    };
+    const statusBadgeClass = {
+      green: 'bg-green-100 text-green-700',
+      amber: 'bg-amber-100 text-amber-700',
+      red: 'bg-red-100 text-red-700',
+      gray: 'bg-gray-100 text-gray-600'
+    };
+
+    function esc(value) {
+      return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
 
     function fmtDate(d) {
       const y = d.getFullYear();
@@ -139,6 +262,7 @@
       const end = new Date();
       end.setHours(0, 0, 0, 0);
       switch (key) {
+        case 'currm': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth(), 1)), to: fmtDate(end) };
         case '1m': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth() - 1, end.getDate())), to: fmtDate(end) };
         case '3m': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth() - 3, end.getDate())), to: fmtDate(end) };
         case '6m': return { from: fmtDate(new Date(end.getFullYear(), end.getMonth() - 6, end.getDate())), to: fmtDate(end) };
@@ -194,48 +318,395 @@
       });
     }
 
+    function populateQuarterOptions() {
+      const now = new Date();
+      const year = now.getFullYear();
+      let options = '<option value="">All Quarters</option>';
+      for (let y = year; y >= year - 2; y--) {
+        for (let q = 1; q <= 4; q++) {
+          const startMonth = String((q - 1) * 3 + 1).padStart(2, '0');
+          const endMonth = String(q * 3).padStart(2, '0');
+          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+          options += `<option value="${y}-${startMonth}">Q${q} ${y} · ${monthNames[(q - 1) * 3]}–${monthNames[q * 3 - 1]}</option>`;
+        }
+      }
+      $('quarterSel').innerHTML = options;
+    }
+
+    function populateSelects() {
+      $('clientSel').innerHTML = '<option value="">All Clients</option>' + meta.clients.map((c) =>
+        `<option value="${c.id}">${esc(c.name)}${c.company_name ? ' — ' + esc(c.company_name) : ''}</option>`).join('');
+      $('amSel').innerHTML = '<option value="">All Account Managers</option>' + meta.accountManagers.map((a) =>
+        `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+      $('statusSel').innerHTML = STATUS_OPTIONS.map((s) =>
+        `<option value="${s.key}">${s.label}</option>`).join('');
+      $('deptSel').innerHTML = '<option value="">All Departments</option>' + meta.departments.map((d) =>
+        `<option value="${esc(d.label)}">${esc(d.label)}</option>`).join('');
+    }
+
     function currentFilters() {
       const p = new URLSearchParams();
       if ($('filterFrom').value) p.set('from', $('filterFrom').value);
       if ($('filterTo').value) p.set('to', $('filterTo').value);
       if (state.sentiment) p.set('sentiment', state.sentiment);
       if (state.service) p.set('serviceType', state.service);
+      if (state.client) p.set('client', state.client);
+      if (state.accountManager) p.set('accountManager', state.accountManager);
+      if (state.status) p.set('status', state.status);
       return p;
     }
 
-    const badgeClasses = {
-      Positive: 'bg-green-100 text-green-700',
-      Neutral: 'bg-orange-100 text-orange-700',
-      Negative: 'bg-red-100 text-red-700'
-    };
-    const urgencyClasses = {
-      Low: 'text-gray-500', Medium: 'text-orange-600 font-bold', High: 'text-red-600 font-extrabold'
-    };
+    function statusBadge(status) {
+      const s = status || { level: 'noData', label: 'No data', color: 'gray' };
+      return `<span class="inline-block rounded-full px-2.5 py-0.5 text-[11px] font-bold whitespace-nowrap ${statusBadgeClass[s.color] || statusBadgeClass.gray}">${s.label}</span>`;
+    }
 
-    function statCard(label, value, extra = '') {
+    function scoreText(score, suffix = '/5') {
+      return score === null || score === undefined ? '—' : `${score.toFixed(2)}<span class="text-base text-gray-400 font-bold">${suffix}</span>`;
+    }
+
+    function changeChip(change) {
+      if (change === null || change === undefined) return '<span class="text-xs font-bold text-gray-400">—</span>';
+      const arrow = change > 0 ? '▲' : change < 0 ? '▼' : '•';
+      const cls = change > 0 ? 'text-green-600' : change < 0 ? 'text-red-600' : 'text-gray-500';
+      return `<span class="text-sm font-extrabold ${cls}">${arrow} ${change > 0 ? '+' : ''}${change.toFixed(1)}</span>`;
+    }
+
+    function sparkline(values) {
+      const pts = (values || []).map((v, i) => (v === null || v === undefined ? null : { x: i, y: v })).filter(Boolean);
+      if (pts.length < 2) return '';
+      const min = Math.min(...pts.map((p) => p.y));
+      const max = Math.max(...pts.map((p) => p.y));
+      const W = 130, H = 32, PAD = 4;
+      const sx = (i) => PAD + (i * (W - PAD * 2)) / 5;
+      const sy = (v) => H - PAD - ((v - min) / (max - min || 1)) * (H - PAD * 2);
+      const d = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
+      const first = pts[0].y, last = pts[pts.length - 1].y;
+      const color = last < first ? '#dc2626' : last > first ? '#16a34a' : '#9ca3af';
+      const note = last < first ? 'declining' : last > first ? 'improving' : 'stable';
+      return `<svg viewBox="0 0 ${W} ${H}" class="mt-2 w-full h-8" role="img" aria-label="6-month trend (${note})">
+        <path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+    }
+
+    function kpiCard(k) {
       return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
-        <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${label}</p>
-        <p class="mt-2 text-3xl font-extrabold ${extra}">${value}</p>
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${k.label}</p>
+          ${statusBadge(k.status)}
+        </div>
+        <p class="mt-2 text-3xl font-extrabold">${scoreText(k.score)}</p>
+        <p class="mt-1 text-xs text-gray-400 font-semibold">${k.count} submission(s) in range</p>
+        ${sparkline(k.history)}
       </div>`;
+    }
+
+    function responseRateCard(k) {
+      return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+        <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${k.label}</p>
+        <p class="mt-2 text-3xl font-extrabold">${k.percent === null ? '—' : k.percent.toFixed(1) + '%'}</p>
+        <p class="mt-1 text-xs text-gray-400 font-semibold">${k.submitted} of ${k.total} feedback request(s) submitted</p>
+      </div>`;
+    }
+
+    function attentionCard(k) {
+      const names = (k.clients || []);
+      const shown = names.slice(0, 6);
+      const more = names.length - shown.length;
+      return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+        <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${k.label}</p>
+        <p class="mt-2 text-3xl font-extrabold ${names.length ? 'text-red-600' : 'text-green-600'}">${names.length}</p>
+        <div class="mt-1 text-xs text-gray-500 font-semibold leading-relaxed">
+          ${names.length === 0 ? '<span class="text-green-700">No clients below 3.0</span>' : shown.map((n) => `<div class="truncate">${esc(n)}</div>`).join('') + (more > 0 ? `<div class="text-gray-400">+ ${more} more</div>` : '')}
+        </div>
+        <p class="mt-2 text-[11px] text-gray-400">Most recent Agency Leadership score below 3.0</p>
+      </div>`;
+    }
+
+    function renderKpis(data) {
+      $('kpiRangeLabel').textContent = (data.range.fromYm === '0000-01' ? 'All time' : data.range.fromYm + ' → ' + data.range.toYm) + (state.client || state.accountManager ? ' · filtered' : '');
+      const six = data.kpis.slice(0, 6);
+      $('kpiCards').innerHTML = six.map(kpiCard).join('') + responseRateCard(data.kpis[6]) + attentionCard(data.kpis[7]);
+      const hasData = six.some((k) => k.score !== null) || data.kpis[6].total > 0;
+      $('kpiEmpty').classList.toggle('hidden', hasData);
+    }
+
+    function renderComparisons(data) {
+      const c = data.comparisons;
+      if (!c) return;
+      const overallMoM = c.month.overall;
+      const overallQoQ = c.quarter.overall;
+      const deptHasData = Object.values(c.month.departments).some((x) => (x.current ?? x.previous) !== null)
+        || Object.values(c.quarter.departments).some((x) => (x.current ?? x.previous) !== null);
+      const hasData = overallMoM.current !== null || overallQoQ.current !== null || deptHasData;
+
+      const clientCard = c.clientAverage && state.client
+        ? (() => {
+            const client = meta.clients.find((x) => String(x.id) === String(state.client));
+            const name = client ? client.name : 'Selected client';
+            const diff = c.clientAverage.score !== null && c.agencyAverage.score !== null ? c.clientAverage.score - c.agencyAverage.score : null;
+            return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-4">
+              <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Client vs Agency Average</p>
+              <p class="mt-2 text-sm font-extrabold truncate" title="${esc(name)}">${esc(name)}</p>
+              <p class="mt-1 text-lg font-extrabold">${scoreText(c.clientAverage.score)}</p>
+              <p class="text-xs text-gray-400 font-semibold">Agency-wide: <b class="text-ink">${scoreText(c.agencyAverage.score)}</b> · ${diff === null ? '—' : (diff > 0 ? '+' : '') + diff.toFixed(2)} vs agency</p>
+            </div>`;
+          })()
+        : '';
+
+      $('cmpCards').innerHTML = `
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Month vs Previous Month</p>
+          <p class="mt-2 text-lg font-extrabold">${scoreText(overallMoM.current)}</p>
+          <div class="mt-1 flex items-center gap-2">${changeChip(overallMoM.change)}
+            <span class="text-xs text-gray-400 font-semibold">vs ${scoreText(overallMoM.previous, '')}</span>
+          </div>
+          <p class="text-[11px] text-gray-400 mt-1">Agency Leadership · ${overallMoM.previous} → ${overallMoM.current}</p>
+        </div>
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-4">
+          <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Quarter vs Previous Quarter</p>
+          <p class="mt-2 text-lg font-extrabold">${scoreText(overallQoQ.current)}</p>
+          <div class="mt-1 flex items-center gap-2">${changeChip(overallQoQ.change)}
+            <span class="text-xs text-gray-400 font-semibold">vs ${scoreText(overallQoQ.previous, '')}</span>
+          </div>
+          <p class="text-[11px] text-gray-400 mt-1">Agency Leadership · ${c.quarter.previous} → ${c.quarter.current}</p>
+        </div>` + clientCard;
+
+      const rows = Object.keys(DEPT_LABELS).map((key) => {
+        const m = c.month.departments[key] || {};
+        const q = c.quarter.departments[key] || {};
+        return `<tr class="hover:bg-gray-50/60 transition">
+          <td class="px-5 py-3 font-bold">${DEPT_LABELS[key]}</td>
+          <td class="px-5 py-3">${m.current === null || m.current === undefined ? '—' : m.current.toFixed(2)}</td>
+          <td class="px-5 py-3">${m.previous === null || m.previous === undefined ? '—' : m.previous.toFixed(2)}</td>
+          <td class="px-5 py-3">${changeChip(m.change)}</td>
+          <td class="px-5 py-3">${q.current === null || q.current === undefined ? '—' : q.current.toFixed(2)}</td>
+          <td class="px-5 py-3">${q.previous === null || q.previous === undefined ? '—' : q.previous.toFixed(2)}</td>
+          <td class="px-5 py-3">${changeChip(q.change)}</td>
+        </tr>`;
+      }).join('');
+
+      $('cmpTableWrap').innerHTML = `<div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+            <tr>
+              <th class="px-5 py-3 font-bold">Department</th>
+              <th class="px-5 py-3 font-bold">This Month</th>
+              <th class="px-5 py-3 font-bold">Last Month</th>
+              <th class="px-5 py-3 font-bold">MoM</th>
+              <th class="px-5 py-3 font-bold">This Quarter</th>
+              <th class="px-5 py-3 font-bold">Last Quarter</th>
+              <th class="px-5 py-3 font-bold">QoQ</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">${rows}</tbody>
+        </table>
+      </div>`;
+      if (!hasData) {
+        $('cmpTableWrap').innerHTML = '';
+        $('cmpEmpty').classList.remove('hidden');
+      } else {
+        $('cmpEmpty').classList.add('hidden');
+      }
+    }
+
+    function trendChart(months, scores, statuses) {
+      const W = 640, H = 150, PADX = 30, BASE = H - 34;
+      const n = months.length;
+      const slot = (W - PADX * 2) / n;
+      const barW = Math.min(46, slot * 0.55);
+      const color = { green: '#16a34a', amber: '#f59e0b', red: '#dc2626', gray: '#e5e7eb' };
+      const bars = months.map((m, i) => {
+        const s = scores[i];
+        const cx = PADX + slot * i + slot / 2;
+        const h = s === null ? 4 : Math.max(4, (s / 5) * (BASE - 34));
+        const y = BASE - h;
+        const c = s === null ? '#e5e7eb' : (color[(statuses[i] || {}).color] || '#e5e7eb');
+        const label = s === null ? '–' : s.toFixed(1);
+        const short = new Date(m + '-01T00:00:00Z').toLocaleString('en', { month: 'short', timeZone: 'UTC' });
+        return `<rect x="${(cx - barW / 2).toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="4" fill="${c}" opacity="0.9">
+          <title>${short} ${new Date(m + '-01T00:00:00Z').getUTCFullYear()}: ${label}</title></rect>
+          <text x="${cx.toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="700" fill="${s === null ? '#9ca3af' : '#111827'}">${label}</text>
+          <text x="${cx.toFixed(1)}" y="${(BASE + 16).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="600" fill="#9ca3af">${short}</text>`;
+      }).join('');
+      return `<svg viewBox="0 0 ${W} ${H}" class="w-full" role="img" aria-label="6-month department trend">
+        <line x1="${PADX}" y1="${BASE}" x2="${W - PADX}" y2="${BASE}" stroke="#e5e7eb" stroke-width="1"/>
+        ${bars}
+      </svg>`;
+    }
+
+    function trendDirection(scores) {
+      const pts = scores.filter((s) => s !== null);
+      if (pts.length < 2) return '';
+      const first = pts[0], last = pts[pts.length - 1];
+      if (last < first) return '<span class="text-xs font-extrabold text-red-600">▼ Declining trend</span>';
+      if (last > first) return '<span class="text-xs font-extrabold text-green-600">▲ Improving trend</span>';
+      return '<span class="text-xs font-extrabold text-gray-500">• Stable</span>';
+    }
+
+    function renderDepartment() {
+      if (!deptData) return;
+      const d = deptData;
+      $('deptSection').classList.remove('hidden');
+      $('deptTitle').textContent = d.department.label + ' — Department View';
+      $('deptRangeLabel').textContent = (d.range.fromYm === '0000-01' ? 'All time' : d.range.fromYm + ' → ' + d.range.toYm) + ' · month-on-month anchored at ' + d.currentMonth.month;
+
+      const momDiff = d.departmentAverage.score !== null && d.agencyAverage.score !== null ? d.departmentAverage.score - d.agencyAverage.score : null;
+
+      $('deptCards').innerHTML = `
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Current Month</p>
+            ${statusBadge(d.currentMonth.status)}
+          </div>
+          <p class="mt-2 text-3xl font-extrabold">${scoreText(d.currentMonth.score)}</p>
+          <p class="mt-1 text-xs text-gray-400 font-semibold">${d.currentMonth.monthLabel} · ${d.currentMonth.count} submission(s)</p>
+        </div>
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Previous Month</p>
+            ${statusBadge(d.previousMonth.status)}
+          </div>
+          <p class="mt-2 text-3xl font-extrabold">${scoreText(d.previousMonth.score)}</p>
+          <p class="mt-1 text-xs text-gray-400 font-semibold">${d.previousMonth.monthLabel} · ${d.previousMonth.count} submission(s)</p>
+        </div>
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+          <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Month-on-Month Change</p>
+          <p class="mt-2 text-3xl font-extrabold">${changeChip(d.momChange)}</p>
+          <p class="mt-1 text-xs text-gray-400 font-semibold">${d.previousMonth.month} → ${d.currentMonth.month}</p>
+        </div>
+        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">3-Month Rolling Average</p>
+            ${statusBadge(d.threeMonth.status)}
+          </div>
+          <p class="mt-2 text-3xl font-extrabold">${scoreText(d.threeMonth.score)}</p>
+          <p class="mt-1 text-xs text-gray-400 font-semibold">${d.threeMonth.fromMonth} → ${d.threeMonth.toMonth} · ${d.threeMonth.count} submission(s)</p>
+        </div>`;
+
+      $('deptTrendChart').innerHTML = (d.trend.scores.every((s) => s === null)
+        ? '<p class="text-sm text-gray-400 py-6 text-center">No data for this period.</p>'
+        : trendChart(d.trend.months, d.trend.scores, d.trend.statuses)) + '<div class="mt-1">' + trendDirection(d.trend.scores) + '</div>';
+
+      $('deptVsAgency').innerHTML = `
+        <div class="flex items-center justify-around py-4">
+          <div class="text-center">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${esc(d.department.label)}</p>
+            <p class="mt-1 text-2xl font-extrabold">${scoreText(d.departmentAverage.score)}</p>
+            <p class="text-[11px] text-gray-400 font-semibold">${d.departmentAverage.count} submission(s) in range</p>
+          </div>
+          <div class="text-2xl text-gray-300 font-extrabold">vs</div>
+          <div class="text-center">
+            <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Agency-wide</p>
+            <p class="mt-1 text-2xl font-extrabold">${scoreText(d.agencyAverage.score)}</p>
+            <p class="text-[11px] text-gray-400 font-semibold">${d.agencyAverage.count} submission(s) in range</p>
+          </div>
+        </div>
+        <p class="text-center text-xs font-bold ${momDiff === null ? 'text-gray-400' : momDiff >= 0 ? 'text-green-600' : 'text-red-600'}">
+          ${momDiff === null ? 'No data for this period.' : (momDiff >= 0 ? '+' : '') + momDiff.toFixed(2) + ' vs agency average'}
+        </p>`;
+
+      $('deptClientCount').textContent = deptData.clients.length + ' client(s)';
+      renderClientTable();
+      renderTopBottom();
+
+      const hasAny = d.currentMonth.score !== null || d.previousMonth.score !== null || d.threeMonth.score !== null || deptData.clients.length > 0;
+      $('deptClientsEmpty').classList.toggle('hidden', deptData.clients.length > 0);
+      $('deptSection').classList.toggle('opacity-60', !hasAny);
+      if (!hasAny) {
+        const banner = $('deptEmptyBanner') || (() => {
+          const el = document.createElement('p');
+          el.id = 'deptEmptyBanner';
+          el.className = 'text-center text-gray-400 text-sm py-2';
+          $('deptSection').insertBefore(el, $('deptSection').firstChild);
+          return el;
+        })();
+        banner.textContent = 'No data for this period.';
+      } else if ($('deptEmptyBanner')) {
+        $('deptEmptyBanner').remove();
+      }
+    }
+
+    function renderClientTable() {
+      const key = deptSort.key;
+      const dir = deptSort.dir;
+      const sorted = [...deptData.clients].sort((a, b) => {
+        const av = key === 'name' ? a.name : a[key];
+        const bv = key === 'name' ? b.name : b[key];
+        if (av === null || av === undefined) return 1 * dir;
+        if (bv === null || bv === undefined) return -1 * dir;
+        return (typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv))) * dir;
+      });
+      const arrow = (k) => (deptSort.key === k ? (deptSort.dir === 1 ? ' ▲' : ' ▼') : '');
+      document.querySelectorAll('#deptSection th[data-sort]').forEach((th) => {
+        const k = th.dataset.sort;
+        th.innerHTML = ({ name: 'Client', avg: 'Average', count: 'Submissions', latest: 'Latest' })[k] + arrow(k);
+      });
+      $('deptClientBody').innerHTML = sorted.map((c) => `
+        <tr class="hover:bg-gray-50/60 transition">
+          <td class="px-5 py-4 font-bold">${esc(c.name)}<div class="text-xs font-normal text-gray-400">${c.accountManager ? esc(c.accountManager) : 'no account manager'}</div></td>
+          <td class="px-5 py-4">${scoreText(c.avg)} ${statusBadge(c.avgStatus)}</td>
+          <td class="px-5 py-4 font-semibold">${c.count}</td>
+          <td class="px-5 py-4">${scoreText(c.latest)} ${statusBadge(c.latestStatus)}</td>
+          <td class="px-5 py-4">${statusBadge(c.clientStatus)}</td>
+        </tr>`).join('');
+    }
+
+    function renderTopBottom() {
+      const row = (c, idx) => `
+        <div class="flex items-center justify-between border border-gray-100 rounded-xl px-4 py-2.5">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="text-xs font-extrabold text-gray-300">${idx + 1}</span>
+            <div class="min-w-0">
+              <p class="text-sm font-bold truncate">${esc(c.name)}</p>
+              <p class="text-[11px] text-gray-400">${c.count} submission(s) · avg ${c.avg === null ? '—' : c.avg.toFixed(2)}</p>
+            </div>
+          </div>
+          ${statusBadge(c.avgStatus)}
+        </div>`;
+      $('deptTop').innerHTML = deptData.topClients.length ? deptData.topClients.map(row).join('') : '<p class="text-sm text-gray-400 text-center py-4">No data for this period.</p>';
+      $('deptBottom').innerHTML = deptData.bottomClients.length ? deptData.bottomClients.map(row).join('') : '<p class="text-sm text-gray-400 text-center py-4">No data for this period.</p>';
+    }
+
+    async function loadDepartment() {
+      if (!state.department) {
+        $('deptSection').classList.add('hidden');
+        return;
+      }
+      const res = await fetch('/api/dashboard/department/' + encodeURIComponent(state.department) + '?' + currentFilters().toString());
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load department view.');
+      deptData = json.data;
+      renderDepartment();
     }
 
     async function loadAll() {
       const p = currentFilters();
-      const [statsRes, listRes, eventsRes] = await Promise.all([
-        fetch('/api/stats?' + p.toString()),
+      const [listRes, eventsRes, kpiRes] = await Promise.all([
         fetch('/api/feedback?' + p.toString()),
-        fetch('/api/stats')
+        fetch('/api/stats'),
+        fetch('/api/dashboard/kpis?' + p.toString())
       ]);
-      const stats = (await statsRes.json()).data;
-      const list = (await listRes.json()).data;
+      const kpiJson = await kpiRes.json();
+      if (!kpiRes.ok || !kpiJson.ok) throw new Error(kpiJson.error || 'Failed to load dashboard KPIs.');
+      let list = (await listRes.json()).data;
+      if (state.client) list = list.filter((r) => String(r.client_id) === String(state.client));
+      if (state.accountManager) {
+        const amIds = new Set(meta.clients.filter((c) => c.account_manager === state.accountManager).map((c) => String(c.id)));
+        list = list.filter((r) => amIds.has(String(r.client_id)));
+      }
       const events = (await eventsRes.json()).data.events;
 
+      const total = list.length;
+      const avgRating = total ? list.reduce((s, r) => s + Number(r.rating || 0), 0) / total : 0;
+      const sentimentCounts = { Positive: 0, Neutral: 0, Negative: 0 };
+      list.forEach((r) => { if (r.sentiment in sentimentCounts) sentimentCounts[r.sentiment]++; });
+
       $('statCards').innerHTML =
-        statCard('Total Feedback', stats.total) +
-        statCard('Average Overall Rating', stats.avgRating.toFixed(2)) +
-        statCard('Positive', stats.sentimentCounts.Positive, 'text-green-600') +
-        statCard('Neutral', stats.sentimentCounts.Neutral, 'text-orange-600') +
-        statCard('Negative', stats.sentimentCounts.Negative, 'text-red-600');
+        statCard('Total Feedback', total) +
+        statCard('Average Overall Rating', (Math.round(avgRating * 100) / 100).toFixed(2)) +
+        statCard('Positive', sentimentCounts.Positive, 'text-green-600') +
+        statCard('Neutral', sentimentCounts.Neutral, 'text-orange-600') +
+        statCard('Negative', sentimentCounts.Negative, 'text-red-600');
 
       renderServiceButtons(events);
 
@@ -254,14 +725,43 @@
           <td class="px-5 py-4 whitespace-nowrap"><a href="${r.pdfUrl}" target="_blank" class="text-brandDark font-bold underline underline-offset-2 hover:text-green-700">PDF</a> · <a href="${r.htmlUrl}" target="_blank" class="text-brandDark font-bold underline underline-offset-2 hover:text-green-700">HTML</a></td>
           <td class="px-5 py-4 text-xs text-gray-500">${new Date(r.timestamp).toLocaleString()}</td>
         </tr>`).join('');
+
+      renderKpis(kpiJson.data);
+      renderComparisons(kpiJson.data);
+      await loadDepartment();
+    }
+
+    const badgeClasses = {
+      Positive: 'bg-green-100 text-green-700',
+      Neutral: 'bg-orange-100 text-orange-700',
+      Negative: 'bg-red-100 text-red-700'
+    };
+    const urgencyClasses = {
+      Low: 'text-gray-500', Medium: 'text-orange-600 font-bold', High: 'text-red-600 font-extrabold'
+    };
+
+    function statCard(label, value, extra = '') {
+      return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
+        <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${label}</p>
+        <p class="mt-2 text-3xl font-extrabold ${extra}">${value}</p>
+      </div>`;
     }
 
     $('applyBtn').addEventListener('click', loadAll);
     $('clearBtn').addEventListener('click', () => {
       $('filterFrom').value = '';
       $('filterTo').value = '';
+      $('quarterSel').value = '';
+      $('clientSel').value = '';
+      $('amSel').value = '';
+      $('statusSel').value = '';
+      $('deptSel').value = '';
       state.service = '';
       state.sentiment = '';
+      state.client = '';
+      state.accountManager = '';
+      state.status = '';
+      state.department = '';
       state.range = 'alltime';
       renderRangeButtons();
       renderSentButtons();
@@ -275,6 +775,33 @@
     });
     $('filterFrom').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
     $('filterTo').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
+
+    $('quarterSel').addEventListener('change', () => {
+      const v = $('quarterSel').value;
+      if (v) {
+        const [y, m] = v.split('-').map(Number);
+        $('filterFrom').value = v + '-01';
+        $('filterTo').value = fmtDate(new Date(y, m, 0));
+      } else {
+        $('filterFrom').value = '';
+        $('filterTo').value = '';
+      }
+      state.range = '';
+      renderRangeButtons();
+      loadAll();
+    });
+    $('clientSel').addEventListener('change', () => { state.client = $('clientSel').value; loadAll(); });
+    $('amSel').addEventListener('change', () => { state.accountManager = $('amSel').value; loadAll(); });
+    $('statusSel').addEventListener('change', () => { state.status = $('statusSel').value; loadAll(); });
+    $('deptSel').addEventListener('change', () => { state.department = $('deptSel').value; loadAll(); });
+
+    document.querySelectorAll('#deptSection th[data-sort]').forEach((th) => {
+      th.addEventListener('click', () => {
+        const k = th.dataset.sort;
+        deptSort = { key: k, dir: deptSort.key === k ? -deptSort.dir : 1 };
+        renderClientTable();
+      });
+    });
 
     $('combinedBtn').addEventListener('click', async () => {
       const btn = $('combinedBtn');
@@ -313,9 +840,26 @@
       window.location.href = '/login.html';
     });
 
-    renderRangeButtons();
-    renderSentButtons();
-    loadAll().catch((e) => alert('Failed to load dashboard: ' + e.message));
+    async function loadMeta() {
+      const res = await fetch('/api/dashboard/meta');
+      const json = await res.json();
+      if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to load dashboard options.');
+      meta = json.data;
+      populateSelects();
+    }
+
+    async function init() {
+      renderRangeButtons();
+      renderSentButtons();
+      populateQuarterOptions();
+      await loadMeta();
+      const def = computeRange('currm');
+      $('filterFrom').value = def.from;
+      $('filterTo').value = def.to;
+      await loadAll();
+    }
+
+    init().catch((e) => alert('Failed to load dashboard: ' + e.message));
   </script>
 </body>
 </html>

@@ -10,6 +10,7 @@ const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
 const { insertFeedback, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClientAccountManager, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
+const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
 
@@ -120,6 +121,7 @@ app.use('/dashboard.html', requireAdminSession);
 app.use('/admin-clients.html', requireAdminSession);
 app.use('/api/clients', requireAdminSession);
 app.use('/api/stats', requireAdminSession);
+app.use('/api/dashboard', requireAdminSession);
 app.use('/api/reports/combined', requireAdminSession);
 app.use('/api/cron', requireAdminSession);
 app.get('/api/feedback', requireAdminSession);
@@ -295,6 +297,55 @@ app.get('/api/stats', async (req, res) => {
     res.json({ ok: true, data: await stats({ from: req.query.from, to: req.query.to }) });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ---------- 3b. Management dashboard aggregations (Phase 2) ----------
+function dashboardQueryParams(req) {
+  const client = String(req.query.client || '').trim();
+  if (client && !Number.isFinite(Number(client))) {
+    const err = new Error(`Invalid client filter "${client}" — must be a client id.`);
+    err.status = 400;
+    throw err;
+  }
+  const status = String(req.query.status || '').trim().toLowerCase();
+  if (status && !STATUS_LEVELS.includes(status)) {
+    const err = new Error(`Invalid status filter "${status}" — use ${STATUS_LEVELS.join(', ')}.`);
+    err.status = 400;
+    throw err;
+  }
+  return {
+    from: String(req.query.from || '').slice(0, 10),
+    to: String(req.query.to || '').slice(0, 10),
+    client: client || '',
+    accountManager: String(req.query.accountManager || req.query.account_manager || '').trim(),
+    status: status || ''
+  };
+}
+
+app.get('/api/dashboard/meta', async (req, res) => {
+  try {
+    res.json({ ok: true, data: await dashboardMeta() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/dashboard/kpis', async (req, res) => {
+  try {
+    const p = dashboardQueryParams(req);
+    res.json({ ok: true, data: await dashboardKpis(p) });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get('/api/dashboard/department/:name', async (req, res) => {
+  try {
+    const p = dashboardQueryParams(req);
+    res.json({ ok: true, data: await dashboardDepartment(req.params.name, p) });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message });
   }
 });
 

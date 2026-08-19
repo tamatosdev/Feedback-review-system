@@ -573,6 +573,8 @@ ensureSchema();
 
 module.exports = {
   db,
+  allRows,
+  getRow,
   dbMode,
   dbHost,
   pingDb,
