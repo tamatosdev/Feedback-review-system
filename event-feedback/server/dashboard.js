@@ -50,19 +50,6 @@ function monthLabel(ym) {
   return new Date(Date.UTC(y, m - 1, 1)).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
-function quarterOf(ym) {
-  return Math.ceil(Number(ym.slice(5, 7)) / 3);
-}
-
-function quarterStartYm(ym) {
-  const q = quarterOf(ym);
-  return `${ym.slice(0, 4)}-${String((q - 1) * 3 + 1).padStart(2, '0')}`;
-}
-
-function quarterLabel(ym) {
-  return `Q${quarterOf(ym)} ${ym.slice(0, 4)}`;
-}
-
 function rangeYm(from, to, now = new Date()) {
   return {
     fromYm: String(from || '').slice(0, 7) || '0000-01',
@@ -235,14 +222,10 @@ function historySeries(byMonth, key, toYm) {
   });
 }
 
-function quarterAverages(byMonth, quarterStart, key, column) {
-  return weightedAvg(byMonth, quarterStart, addMonths(quarterStart, 2), key, column);
-}
-
 async function dashboardKpis({ from, to, client, accountManager } = {}) {
   validateFilters({ client, accountManager });
   const { fromYm, toYm } = rangeYm(from, to);
-  const wideFrom = [fromYm, addMonths(toYm, -5), addMonths(quarterStartYm(toYm), -3)].sort()[0];
+  const wideFrom = [fromYm, addMonths(toYm, -5)].sort()[0];
   const hasFilters = !!(client || accountManager);
 
   const [series, agencySeries, rangeAvg, agencyRangeAvg, rate, latest] = await Promise.all([
@@ -257,8 +240,6 @@ async function dashboardKpis({ from, to, client, accountManager } = {}) {
   const agencyAvg = agencyRangeAvg || rangeAvg;
 
   const prevYm = addMonths(toYm, -1);
-  const quarterCur = quarterStartYm(toYm);
-  const quarterPrev = addMonths(quarterCur, -3);
 
   const kpis = DEPARTMENTS.map((d) => {
     const score = rangeAvg[d.key];
@@ -273,15 +254,10 @@ async function dashboardKpis({ from, to, client, accountManager } = {}) {
   });
 
   const monthDepartments = {};
-  const quarterDepartments = {};
   for (const d of DEPARTMENTS) {
     monthDepartments[d.key] = changePair(
       monthBucketAvg(series.byMonth, toYm, d.key),
       monthBucketAvg(series.byMonth, prevYm, d.key)
-    );
-    quarterDepartments[d.key] = changePair(
-      quarterAverages(series.byMonth, quarterCur, d.key, d.column),
-      quarterAverages(series.byMonth, quarterPrev, d.key, d.column)
     );
   }
 
@@ -304,15 +280,6 @@ async function dashboardKpis({ from, to, client, accountManager } = {}) {
           monthBucketAvg(series.byMonth, prevYm, 'agencyLeadershipScore')
         ),
         departments: monthDepartments
-      },
-      quarter: {
-        current: quarterLabel(toYm),
-        previous: quarterLabel(addMonths(quarterCur, -3)),
-        overall: changePair(
-          quarterAverages(series.byMonth, quarterCur, 'agencyLeadershipScore', 'agency_leadership_score'),
-          quarterAverages(series.byMonth, quarterPrev, 'agencyLeadershipScore', 'agency_leadership_score')
-        ),
-        departments: quarterDepartments
       },
       agencyAverage: { score: round2(agencyAvg.agencyLeadershipScore), count: agencyAvg.cnt_agency_leadership_score || 0 },
       clientAverage: hasFilters ? { score: round2(rangeAvg.agencyLeadershipScore), count: rangeAvg.cnt_agency_leadership_score || 0 } : null
@@ -481,8 +448,6 @@ module.exports = {
   statusForScore,
   addMonths,
   currentYm,
-  quarterLabel,
-  quarterStartYm,
   monthLabel,
   rangeYm,
   lastSixMonths,

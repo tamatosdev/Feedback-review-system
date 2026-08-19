@@ -30,7 +30,6 @@
       </div>
       <div class="flex items-center gap-3">
         <a href="/admin-clients.html" class="text-sm font-bold text-white bg-ink hover:opacity-90 rounded-xl px-4 py-2 transition">Manage Clients</a>
-        <a href="/" class="text-sm font-bold text-ink bg-brand hover:bg-brandDark rounded-xl px-4 py-2 transition">Submit Feedback</a>
         <button id="logoutBtn" class="text-sm font-semibold text-gray-500 hover:text-ink px-2 transition">Log out</button>
       </div>
     </div>
@@ -58,11 +57,7 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-          <label class="block text-xs font-bold mb-2">Quarter</label>
-          <select id="quarterSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
-        </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div>
           <label class="block text-xs font-bold mb-2">Client</label>
           <select id="clientSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
@@ -80,11 +75,6 @@
       <div class="max-w-xs">
         <label class="block text-xs font-bold mb-2">Department <span class="font-normal text-gray-400">(shows department view)</span></label>
         <select id="deptSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
-      </div>
-
-      <div>
-        <label class="block text-xs font-bold mb-2">Project / Service Name</label>
-        <div id="serviceBtns" class="flex flex-wrap gap-2"></div>
       </div>
 
       <div>
@@ -173,9 +163,6 @@
       </div>
     </section>
 
-    <!-- Stats (existing) -->
-    <section class="grid grid-cols-2 md:grid-cols-5 gap-4" id="statCards"></section>
-
     <!-- Table (existing) -->
     <section class="bg-white border border-gray-100 rounded-2xl shadow-md overflow-hidden">
       <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
@@ -186,7 +173,7 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
             <tr>
-              <th class="px-5 py-3 font-bold">Project / Service</th>
+              <th class="px-5 py-3 font-bold">Client / Company</th>
               <th class="px-5 py-3 font-bold">Overall Rating</th>
               <th class="px-5 py-3 font-bold">Sentiment</th>
               <th class="px-5 py-3 font-bold">AI Summary</th>
@@ -207,7 +194,7 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
-    const state = { service: '', sentiment: '', range: 'currm', client: '', accountManager: '', status: '', department: '' };
+    const state = { sentiment: '', range: 'currm', client: '', accountManager: '', status: '', department: '' };
     let meta = { departments: [], clients: [], accountManagers: [] };
     let deptData = null;
     let deptSort = { key: 'name', dir: 1 };
@@ -249,6 +236,11 @@
 
     function esc(value) {
       return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function clientLabel(r) {
+      const client = meta.clients.find((c) => String(c.id) === String(r.client_id));
+      return r.companyName || (client && (client.company_name || client.name)) || r.attendeeName || '—';
     }
 
     function fmtDate(d) {
@@ -302,37 +294,6 @@
       });
     }
 
-    function renderServiceButtons(events) {
-      const names = ['All Services'].concat(events || []);
-      $('serviceBtns').innerHTML = names.map((n) => {
-        const isAll = n === 'All Services';
-        const active = isAll ? state.service === '' : state.service === n;
-        return `<button type="button" data-service="${isAll ? '' : n.replace(/"/g, '&quot;')}" class="${chipBase} ${active ? chipOn : chipOff}">${n}</button>`;
-      }).join('');
-      $('serviceBtns').querySelectorAll('button').forEach((b) => {
-        b.addEventListener('click', () => {
-          const v = b.dataset.service;
-          state.service = state.service === v ? '' : v;
-          loadAll();
-        });
-      });
-    }
-
-    function populateQuarterOptions() {
-      const now = new Date();
-      const year = now.getFullYear();
-      let options = '<option value="">All Quarters</option>';
-      for (let y = year; y >= year - 2; y--) {
-        for (let q = 1; q <= 4; q++) {
-          const startMonth = String((q - 1) * 3 + 1).padStart(2, '0');
-          const endMonth = String(q * 3).padStart(2, '0');
-          const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-          options += `<option value="${y}-${startMonth}">Q${q} ${y} · ${monthNames[(q - 1) * 3]}–${monthNames[q * 3 - 1]}</option>`;
-        }
-      }
-      $('quarterSel').innerHTML = options;
-    }
-
     function populateSelects() {
       $('clientSel').innerHTML = '<option value="">All Clients</option>' + meta.clients.map((c) =>
         `<option value="${c.id}">${esc(c.name)}${c.company_name ? ' — ' + esc(c.company_name) : ''}</option>`).join('');
@@ -349,7 +310,6 @@
       if ($('filterFrom').value) p.set('from', $('filterFrom').value);
       if ($('filterTo').value) p.set('to', $('filterTo').value);
       if (state.sentiment) p.set('sentiment', state.sentiment);
-      if (state.service) p.set('serviceType', state.service);
       if (state.client) p.set('client', state.client);
       if (state.accountManager) p.set('accountManager', state.accountManager);
       if (state.status) p.set('status', state.status);
@@ -434,10 +394,8 @@
       const c = data.comparisons;
       if (!c) return;
       const overallMoM = c.month.overall;
-      const overallQoQ = c.quarter.overall;
-      const deptHasData = Object.values(c.month.departments).some((x) => (x.current ?? x.previous) !== null)
-        || Object.values(c.quarter.departments).some((x) => (x.current ?? x.previous) !== null);
-      const hasData = overallMoM.current !== null || overallQoQ.current !== null || deptHasData;
+      const deptHasData = Object.values(c.month.departments).some((x) => (x.current ?? x.previous) !== null);
+      const hasData = overallMoM.current !== null || deptHasData;
 
       const clientCard = c.clientAverage && state.client
         ? (() => {
@@ -461,27 +419,15 @@
             <span class="text-xs text-gray-400 font-semibold">vs ${scoreText(overallMoM.previous, '')}</span>
           </div>
           <p class="text-[11px] text-gray-400 mt-1">Agency Leadership · ${overallMoM.previous} → ${overallMoM.current}</p>
-        </div>
-        <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-4">
-          <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Quarter vs Previous Quarter</p>
-          <p class="mt-2 text-lg font-extrabold">${scoreText(overallQoQ.current)}</p>
-          <div class="mt-1 flex items-center gap-2">${changeChip(overallQoQ.change)}
-            <span class="text-xs text-gray-400 font-semibold">vs ${scoreText(overallQoQ.previous, '')}</span>
-          </div>
-          <p class="text-[11px] text-gray-400 mt-1">Agency Leadership · ${c.quarter.previous} → ${c.quarter.current}</p>
         </div>` + clientCard;
 
       const rows = Object.keys(DEPT_LABELS).map((key) => {
         const m = c.month.departments[key] || {};
-        const q = c.quarter.departments[key] || {};
         return `<tr class="hover:bg-gray-50/60 transition">
           <td class="px-5 py-3 font-bold">${DEPT_LABELS[key]}</td>
           <td class="px-5 py-3">${m.current === null || m.current === undefined ? '—' : m.current.toFixed(2)}</td>
           <td class="px-5 py-3">${m.previous === null || m.previous === undefined ? '—' : m.previous.toFixed(2)}</td>
           <td class="px-5 py-3">${changeChip(m.change)}</td>
-          <td class="px-5 py-3">${q.current === null || q.current === undefined ? '—' : q.current.toFixed(2)}</td>
-          <td class="px-5 py-3">${q.previous === null || q.previous === undefined ? '—' : q.previous.toFixed(2)}</td>
-          <td class="px-5 py-3">${changeChip(q.change)}</td>
         </tr>`;
       }).join('');
 
@@ -493,9 +439,6 @@
               <th class="px-5 py-3 font-bold">This Month</th>
               <th class="px-5 py-3 font-bold">Last Month</th>
               <th class="px-5 py-3 font-bold">MoM</th>
-              <th class="px-5 py-3 font-bold">This Quarter</th>
-              <th class="px-5 py-3 font-bold">Last Quarter</th>
-              <th class="px-5 py-3 font-bold">QoQ</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">${rows}</tbody>
@@ -681,9 +624,8 @@
 
     async function loadAll() {
       const p = currentFilters();
-      const [listRes, eventsRes, kpiRes] = await Promise.all([
+      const [listRes, kpiRes] = await Promise.all([
         fetch('/api/feedback?' + p.toString()),
-        fetch('/api/stats'),
         fetch('/api/dashboard/kpis?' + p.toString())
       ]);
       const kpiJson = await kpiRes.json();
@@ -694,28 +636,13 @@
         const amIds = new Set(meta.clients.filter((c) => c.account_manager === state.accountManager).map((c) => String(c.id)));
         list = list.filter((r) => amIds.has(String(r.client_id)));
       }
-      const events = (await eventsRes.json()).data.events;
-
-      const total = list.length;
-      const avgRating = total ? list.reduce((s, r) => s + Number(r.rating || 0), 0) / total : 0;
-      const sentimentCounts = { Positive: 0, Neutral: 0, Negative: 0 };
-      list.forEach((r) => { if (r.sentiment in sentimentCounts) sentimentCounts[r.sentiment]++; });
-
-      $('statCards').innerHTML =
-        statCard('Total Feedback', total) +
-        statCard('Average Overall Rating', (Math.round(avgRating * 100) / 100).toFixed(2)) +
-        statCard('Positive', sentimentCounts.Positive, 'text-green-600') +
-        statCard('Neutral', sentimentCounts.Neutral, 'text-orange-600') +
-        statCard('Negative', sentimentCounts.Negative, 'text-red-600');
-
-      renderServiceButtons(events);
 
       $('rowCount').textContent = list.length + ' result(s)';
       $('emptyState').classList.toggle('hidden', list.length > 0);
 
       $('tableBody').innerHTML = list.map((r) => `
         <tr class="hover:bg-gray-50/60 transition">
-          <td class="px-5 py-4 font-bold">${r.serviceType}<div class="text-xs font-normal text-gray-400">${r.attendeeName} · ${r.month || 'no date'}</div></td>
+          <td class="px-5 py-4 font-bold">${esc(clientLabel(r))}<div class="text-xs font-normal text-gray-400">${r.attendeeName} · ${r.month || 'no date'}</div></td>
           <td class="px-5 py-4 font-extrabold">${r.rating}/5</td>
           <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${badgeClasses[r.sentiment] || 'bg-gray-100 text-gray-600'}">${r.sentiment}</span></td>
           <td class="px-5 py-4 max-w-[220px] text-gray-600"><div class="line-clamp-2" title="${r.summary.replace(/"/g, '&quot;')}">${r.summary}</div></td>
@@ -740,23 +667,14 @@
       Low: 'text-gray-500', Medium: 'text-orange-600 font-bold', High: 'text-red-600 font-extrabold'
     };
 
-    function statCard(label, value, extra = '') {
-      return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
-        <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${label}</p>
-        <p class="mt-2 text-3xl font-extrabold ${extra}">${value}</p>
-      </div>`;
-    }
-
     $('applyBtn').addEventListener('click', loadAll);
     $('clearBtn').addEventListener('click', () => {
       $('filterFrom').value = '';
       $('filterTo').value = '';
-      $('quarterSel').value = '';
       $('clientSel').value = '';
       $('amSel').value = '';
       $('statusSel').value = '';
       $('deptSel').value = '';
-      state.service = '';
       state.sentiment = '';
       state.client = '';
       state.accountManager = '';
@@ -776,20 +694,6 @@
     $('filterFrom').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
     $('filterTo').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
 
-    $('quarterSel').addEventListener('change', () => {
-      const v = $('quarterSel').value;
-      if (v) {
-        const [y, m] = v.split('-').map(Number);
-        $('filterFrom').value = v + '-01';
-        $('filterTo').value = fmtDate(new Date(y, m, 0));
-      } else {
-        $('filterFrom').value = '';
-        $('filterTo').value = '';
-      }
-      state.range = '';
-      renderRangeButtons();
-      loadAll();
-    });
     $('clientSel').addEventListener('change', () => { state.client = $('clientSel').value; loadAll(); });
     $('amSel').addEventListener('change', () => { state.accountManager = $('amSel').value; loadAll(); });
     $('statusSel').addEventListener('change', () => { state.status = $('statusSel').value; loadAll(); });
@@ -851,7 +755,6 @@
     async function init() {
       renderRangeButtons();
       renderSentButtons();
-      populateQuarterOptions();
       await loadMeta();
       const params = new URLSearchParams(location.search);
       const clientId = params.get('client');

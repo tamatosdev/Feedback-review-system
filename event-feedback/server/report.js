@@ -113,7 +113,9 @@ function reportHTML(record, logoPath) {
         <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">ORIGINAL CLIENT FEEDBACK</h2>
         <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px 20px">
           <p style="margin:0 0 10px"><strong>Client Feedback / Comments:</strong> ${esc(record.comments)}</p>
-          <p style="margin:0"><strong>Suggestions / Recommendations:</strong> ${esc(record.suggestions)}</p>
+          ${record.suggestions && record.suggestions !== 'No suggestions provided'
+            ? `<p style="margin:0"><strong>Suggestions / Recommendations:</strong> ${esc(record.suggestions)}</p>`
+            : ''}
         </div>
 
         <p style="margin:30px 0 0;color:#6b7280;font-size:12px">

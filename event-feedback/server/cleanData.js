@@ -38,7 +38,7 @@ function makeSubmissionId() {
  * - trims strings
  * - default attendee name -> "Anonymous"
  * - invalid email -> hasValidEmail = false
- * - empty comments/suggestions -> defaults
+ * - empty comments -> "No comments provided"
  * - ALL SIX department scores required, each an integer 1-5; throws a clear
  *   ValidationError (err.status = 400) when any is missing or invalid
  * - rating (legacy column) is set equal to agencyLeadershipScore (the
@@ -77,8 +77,7 @@ function cleanData(raw = {}) {
     companyName: cleanString(raw.companyName, ''),
     ...scores,
     rating: scores.agencyLeadershipScore,
-    comments: cleanString(raw.comments, 'No comments provided'),
-    suggestions: cleanString(raw.suggestions, 'No suggestions provided')
+    comments: cleanString(raw.comments, 'No comments provided')
   };
 }
 

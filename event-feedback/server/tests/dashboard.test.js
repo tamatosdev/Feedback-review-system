@@ -143,20 +143,13 @@ test('dashboardKpis computes known expected values for Aug 2026', async () => {
   assert.deepStrictEqual(attention.clients, ['Acme A']);
 });
 
-test('dashboardKpis MoM/QoQ comparisons are correct', async () => {
+test('dashboardKpis MoM comparisons are correct', async () => {
   const data = await dashboardKpis({ from: '2026-08-01', to: '2026-08-31' });
   const m = data.comparisons.month;
   assert.strictEqual(m.overall.current, 3);
   assert.strictEqual(m.overall.previous, 5);
   assert.strictEqual(m.overall.change, -2);
   assert.strictEqual(m.departments.creativeScore.change, -0.5, 'creative Jul 3 vs Aug 2.5 = -0.5');
-
-  const q = data.comparisons.quarter;
-  assert.strictEqual(q.current, 'Q3 2026');
-  assert.strictEqual(q.previous, 'Q2 2026');
-  assert.strictEqual(q.overall.current, 3.67, '(5*1 + 3*2)/3 rounded');
-  assert.strictEqual(q.overall.previous, null, 'no data in previous quarter');
-  assert.strictEqual(q.overall.change, null);
 });
 
 test('dashboardKpis client and account manager filters narrow the data', async () => {
@@ -241,7 +234,6 @@ test('empty range returns nulls and empty arrays without crashing', async () => 
   assert.strictEqual(k.kpis[7].count, 0);
   assert.strictEqual(k.comparisons.month.overall.current, null);
   assert.strictEqual(k.comparisons.month.overall.change, null);
-  assert.strictEqual(k.comparisons.quarter.overall.current, null);
   assert.strictEqual(k.comparisons.agencyAverage.score, null);
 
   const d = await dashboardDepartment('Agency Leadership', { from: '2026-01-01', to: '2026-01-31' });

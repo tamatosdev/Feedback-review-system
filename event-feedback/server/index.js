@@ -234,7 +234,7 @@ app.post('/api/feedback', async (req, res) => {
       socialContentScore: record.socialContentScore,
       agencyLeadershipScore: record.agencyLeadershipScore,
       comments: record.comments,
-      suggestions: record.suggestions,
+      suggestions: null,
       sentiment: record.sentiment,
       summary: record.summary,
       urgency: record.urgency,
@@ -809,7 +809,8 @@ function ratingQuestionsScript() {
     function ratingOption(n, key) {
       return '<label class="flex-1 cursor-pointer">' +
         '<input type="radio" name="' + key + '" value="' + n + '" required class="peer sr-only" />' +
-        '<span class="flex flex-col items-center gap-0.5 rounded-xl border-2 border-gray-200 py-2.5 px-1 text-sm font-bold text-gray-500 transition hover:border-brandDark hover:text-ink peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-ink peer-checked:font-extrabold">' +
+        '<span class="rating-box flex flex-col items-center gap-0.5 rounded-xl border-2 border-gray-200 py-2.5 px-1 text-sm font-bold text-gray-500 transition hover:border-brandDark hover:text-ink peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-ink peer-checked:font-extrabold">' +
+          '<svg class="rating-star shrink-0" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg>' +
           '<span class="text-lg leading-none">' + n + '</span>' +
           '<span class="text-[9px] font-semibold leading-tight text-center text-gray-400 peer-checked:text-gray-600">' + SCALE_LABELS[n - 1] + '</span>' +
         '</span>' +
@@ -854,6 +855,9 @@ function feedbackFormPage(client, request, logoPath) {
   </script>
   <style>
     body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+    .rating-star { fill: none; stroke: currentColor; stroke-width: 1.6; transition: fill .15s ease; }
+    .rating-box:hover .rating-star { fill: #FFF000; }
+    .peer:checked ~ .rating-box .rating-star { fill: #FFF000; stroke: #111827; }
   </style>
 </head>
 <body class="min-h-screen bg-white text-ink antialiased">
@@ -895,12 +899,6 @@ function feedbackFormPage(client, request, logoPath) {
       <div>
         <label for="comments" class="block text-sm font-bold mb-1.5">Client Feedback </label>
         <textarea id="comments" name="comments" rows="4" placeholder="Share your feedback"
-          class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"></textarea>
-      </div>
-
-      <div>
-        <label for="suggestions" class="block text-sm font-bold mb-1.5">Suggestions</label>
-        <textarea id="suggestions" name="suggestions" rows="3" placeholder="Share your suggestions"
           class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand"></textarea>
       </div>
 

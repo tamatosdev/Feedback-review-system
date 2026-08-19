@@ -20,8 +20,7 @@ test('cleanData trims strings, applies defaults, keeps all six department scores
     attendeeEmail: 'not-an-email',
     companyName: '  Acme  ',
     ...VALID_SCORES,
-    comments: '   ',
-    suggestions: '   '
+    comments: '   '
   });
   assert.strictEqual(c.eventName, 'Product Launch');
   assert.strictEqual(c.eventDate, '2026-08-10');
@@ -35,7 +34,7 @@ test('cleanData trims strings, applies defaults, keeps all six department scores
   assert.strictEqual(c.socialContentScore, 4);
   assert.strictEqual(c.agencyLeadershipScore, 5);
   assert.strictEqual(c.comments, 'No comments provided');
-  assert.strictEqual(c.suggestions, 'No suggestions provided');
+  assert.strictEqual(c.suggestions, undefined, 'cleanData no longer reads or returns a suggestions field');
   assert.match(c.submissionId, /^FB-/);
   assert.ok(!Number.isNaN(Date.parse(c.timestamp)));
 });

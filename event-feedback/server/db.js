@@ -389,7 +389,7 @@ async function insertFeedback(row) {
   `, [
     row.submissionId, row.timestamp, row.serviceType, row.month ?? null, row.client_id ?? null,
     row.attendeeName, row.attendeeEmail, row.hasValidEmail ? 1 : 0, row.companyName, row.rating,
-    row.comments, row.suggestions, row.sentiment, row.summary, row.urgency,
+    row.comments, row.suggestions ?? null, row.sentiment, row.summary, row.urgency,
     JSON.stringify(row.highlights || []), JSON.stringify(row.improvementSuggestions || []),
     row.pdfUrl ?? '', row.emailSent ? 1 : 0, new Date().toISOString(),
     row.accountManagementScore ?? null, row.strategyScore ?? null, row.creativeScore ?? null,

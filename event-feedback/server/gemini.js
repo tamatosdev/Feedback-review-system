@@ -35,8 +35,7 @@ Project Name / Service Name: ${data.eventName}
 Overall Rating: ${data.rating}/5
 Department Ratings:
 ${departmentScoresLine(data)}
-Client Feedback/Comments: ${data.comments}
-Suggestions/Recommendations: ${data.suggestions}`;
+Client Feedback/Comments: ${data.comments}`;
 
 function ratingFallback(rating) {
   if (rating >= 4) return 'Positive';
@@ -56,9 +55,7 @@ function fallbackAnalysis(data) {
     sentiment,
     summary: `This feedback received a ${data.rating}/5 rating. ${data.comments}`,
     highlights: [data.comments],
-    improvementSuggestions: [data.suggestions === 'No suggestions provided'
-      ? 'No AI suggestions available.'
-      : data.suggestions],
+    improvementSuggestions: ['No AI suggestions available.'],
     urgency: urgencyFallback(sentiment)
   };
 }
@@ -134,7 +131,7 @@ async function analyzeCombined(feedbackRows, { apiKey } = {}) {
       const scores = f.agencyLeadershipScore != null
         ? ` | Department Scores: AM ${fmtScore(f.accountManagementScore)}, ST ${fmtScore(f.strategyScore)}, CR ${fmtScore(f.creativeScore)}, DC ${fmtScore(f.designContentScore)}, SC ${fmtScore(f.socialContentScore)}, AL ${fmtScore(f.agencyLeadershipScore)}`
         : '';
-      return `#${i + 1} Project/Service: ${f.eventName} | Overall Rating: ${f.rating}/5${scores} | Client Feedback: ${f.comments} | Suggestions: ${f.suggestions}`;
+      return `#${i + 1} Project/Service: ${f.eventName} | Overall Rating: ${f.rating}/5${scores} | Client Feedback: ${f.comments}`;
     })
     .join('\n');
 

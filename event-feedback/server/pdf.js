@@ -209,7 +209,9 @@ function writeFeedbackSection(doc, r, index, fullPage = true) {
 
   sectionHeading(doc, 'Original Client Feedback');
   drawLabeledLine(doc, 'Client Feedback / Comments:', r.comments);
-  drawLabeledLine(doc, 'Suggestions / Recommendations:', r.suggestions);
+  if (r.suggestions && r.suggestions !== 'No suggestions provided') {
+    drawLabeledLine(doc, 'Suggestions / Recommendations:', r.suggestions);
+  }
 
   ensureSpace(doc, 30);
   doc.fillColor(GRAY).font(doc.interFonts.regular).fontSize(8.5)
