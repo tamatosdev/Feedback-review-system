@@ -57,7 +57,8 @@ test.before(async () => {
   db.exec('DELETE FROM feedback_reports');
 });
 
-test.after(() => {
+test.after(async () => {
+  await app.flushBackground();
   db.close();
   for (const suffix of ['', '-wal', '-shm']) {
     try { fs.unlinkSync(process.env.DB_PATH + suffix); } catch {}

@@ -4,11 +4,11 @@ const crypto = require('crypto');
 const express = require('express');
 const cron = require('node-cron');
 const { cleanData } = require('./cleanData');
-const { analyzeFeedback, analyzeCombined, sentimentColor } = require('./gemini');
+const { analyzeFeedback, analyzeCombined, sentimentColor, fallbackAnalysis } = require('./gemini');
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClientAccountManager, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClientAccountManager, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
@@ -30,6 +30,38 @@ const smtpConfig = {
   adminEmail: process.env.ADMIN_EMAIL || 'tahir@puredesigners.com'
 };
 const geminiApiKey = process.env.GEMINI_API_KEY || '';
+
+// ---------- Background processing (response-first submissions) ----------
+// On Vercel, @vercel/functions' waitUntil() keeps the function alive until the
+// queued work completes; outside Vercel it no-ops and the promise still runs.
+let scheduleBackground;
+try {
+  const { waitUntil } = require('@vercel/functions');
+  scheduleBackground = (fn) => {
+    const p = Promise.resolve().then(fn);
+    return waitUntil(p) ?? p;
+  };
+} catch {
+  scheduleBackground = (fn) => Promise.resolve().then(fn);
+}
+const backgroundJobs = [];
+function runInBackground(fn) {
+  let job;
+  try {
+    job = Promise.resolve(scheduleBackground(() => Promise.resolve(fn())));
+  } catch (err) {
+    console.error('[Background job] scheduler unavailable, running inline:', err.message);
+    job = Promise.resolve(fn());
+  }
+  job = job.catch((err) => console.error('[Background job] failed:', err));
+  backgroundJobs.push(job);
+  job.finally(() => {
+    const i = backgroundJobs.indexOf(job);
+    if (i !== -1) backgroundJobs.splice(i, 1);
+  });
+  return job;
+}
+app.flushBackground = () => Promise.allSettled(backgroundJobs.slice());
 
 // ---------- Admin session auth (single fixed login, signed httpOnly cookie) ----------
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || '';
@@ -149,7 +181,7 @@ async function saveHtml(html, fileName) {
   }
 }
 
-// ---------- 1. Submit feedback: clean -> AI -> report -> PDF -> email -> DB ----------
+// ---------- 1. Submit feedback: save + respond fast, then AI -> report -> PDF -> email -> alerts in the background ----------
 app.post('/api/feedback', async (req, res) => {
   try {
     const body = req.body || {};
@@ -184,37 +216,15 @@ app.post('/api/feedback', async (req, res) => {
       cleaned.eventDate = request.month;
     }
 
-    const { analysis, usedAi } = await analyzeFeedback(cleaned, { apiKey: geminiApiKey });
-    const color = sentimentColor(analysis.sentiment);
+    const fallback = fallbackAnalysis(cleaned);
 
     const record = {
       ...cleaned,
-      ...analysis,
-      sentimentColor: color,
+      ...fallback,
+      sentimentColor: sentimentColor(fallback.sentiment),
       pdfUrl: '',
       emailSent: false
     };
-
-    const html = reportHTML(record, '/assets/logo.png');
-    await saveHtml(html, `${record.submissionId}.html`);
-
-    const pdfBuffer = await buildPdf(record);
-    const pdfFileName = `${record.submissionId}.pdf`;
-    const saved = await savePdf(pdfBuffer, pdfFileName);
-    record.pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
-
-    let emailError = null;
-    try {
-      if (smtpConfig.smtpPass) {
-        await sendFeedbackEmail(smtpConfig, record, pdfBuffer, record.pdfUrl);
-        record.emailSent = true;
-      } else {
-        emailError = 'SMTP_PASS not set; email skipped.';
-      }
-    } catch (err) {
-      emailError = err.message;
-      console.error('[Email] send failed:', err.message);
-    }
 
     await insertFeedback({
       submissionId: record.submissionId,
@@ -240,22 +250,12 @@ app.post('/api/feedback', async (req, res) => {
       urgency: record.urgency,
       highlights: record.highlights,
       improvementSuggestions: record.improvementSuggestions,
-      pdfUrl: record.pdfUrl,
-      emailSent: record.emailSent
+      pdfUrl: '',
+      emailSent: false
     });
 
     if (request) {
       await markFeedbackRequestSubmitted(request.id);
-    }
-
-    let alertResults = { evaluated: false, sent: [], skipped: [] };
-    if (client) {
-      try {
-        alertResults = await evaluateSubmissionAlerts({ client, record, smtpConfig, appBaseUrl: APP_BASE_URL });
-      } catch (err) {
-        console.error('[Alerts] evaluation failed (submission unaffected):', err.message);
-        alertResults = { evaluated: false, error: err.message, sent: [], skipped: [] };
-      }
     }
 
     res.status(201).json({
@@ -276,22 +276,72 @@ app.post('/api/feedback', async (req, res) => {
         agencyLeadershipScore: record.agencyLeadershipScore
       },
       sentiment: record.sentiment,
-      sentimentColor: color,
+      sentimentColor: record.sentimentColor,
       urgency: record.urgency,
       summary: record.summary,
-      usedAi,
-      emailSent: record.emailSent,
-      emailError,
-      alerts: alertResults,
-      pdfUrl: record.pdfUrl,
-      pdfFileName,
-      pdfSize: saved.size
+      usedAi: false,
+      emailSent: false,
+      emailError: smtpConfig.smtpPass ? null : 'SMTP_PASS not set; email skipped.',
+      alerts: { evaluated: false, sent: [], skipped: [], note: 'Evaluated in the background after the response.' },
+      pdfUrl: '',
+      pdfFileName: null,
+      pdfSize: 0
     });
+
+    runInBackground(() => processSubmissionBackground(record, client));
   } catch (err) {
     console.error('[POST /api/feedback]', err);
     res.status(err.status || 500).json({ ok: false, error: err.message });
   }
 });
+
+async function processSubmissionBackground(initialRecord, client) {
+  try {
+    let record = initialRecord;
+    const { analysis } = await analyzeFeedback(initialRecord, { apiKey: geminiApiKey });
+    record = { ...initialRecord, ...analysis, sentimentColor: sentimentColor(analysis.sentiment) };
+
+    const html = reportHTML(record, '/assets/logo.png');
+    await saveHtml(html, `${record.submissionId}.html`);
+
+    const pdfBuffer = await buildPdf(record);
+    const pdfFileName = `${record.submissionId}.pdf`;
+    const saved = await savePdf(pdfBuffer, pdfFileName);
+    record.pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
+
+    if (smtpConfig.smtpPass) {
+      try {
+        await sendFeedbackEmail(smtpConfig, record, pdfBuffer, record.pdfUrl);
+        record.emailSent = true;
+      } catch (err) {
+        console.error('[Email] send failed:', err.message);
+      }
+    } else {
+      console.log('[Email] SMTP_PASS not set; email skipped.');
+    }
+
+    await updateFeedbackAnalysis({
+      submissionId: record.submissionId,
+      sentiment: record.sentiment,
+      summary: record.summary,
+      urgency: record.urgency,
+      highlights: record.highlights,
+      improvementSuggestions: record.improvementSuggestions,
+      pdfUrl: record.pdfUrl,
+      emailSent: record.emailSent
+    });
+
+    if (client) {
+      try {
+        await evaluateSubmissionAlerts({ client, record, smtpConfig, appBaseUrl: APP_BASE_URL });
+      } catch (err) {
+        console.error('[Alerts] evaluation failed (submission unaffected):', err.message);
+      }
+    }
+  } catch (err) {
+    console.error('[Background processing] failed for submission:', err.message);
+  }
+}
 
 // ---------- 2. List feedback with filters ----------
 app.get('/api/feedback', async (req, res) => {

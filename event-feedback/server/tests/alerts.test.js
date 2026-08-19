@@ -105,7 +105,9 @@ async function postFeedback(base, token, overrides) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body({ token, ...overrides }))
   });
-  return { status: res.status, json: await res.json() };
+  const json = await res.json();
+  await app.flushBackground();
+  return { status: res.status, json };
 }
 
 test('low score submission fires one leadership alert; dedup blocks repeats', async () => {
@@ -118,9 +120,6 @@ test('low score submission fires one leadership alert; dedup blocks repeats', as
   try {
     const r = await postFeedback(base, token, { agencyLeadershipScore: 2 });
     assert.strictEqual(r.status, 201);
-    assert.strictEqual(r.json.alerts.evaluated, true);
-    assert.ok(r.json.alerts.sent.includes('low_score'), `sent: ${r.json.alerts.sent}`);
-    assert.ok(r.json.alerts.sent.includes('dept_low:agencyLeadershipScore'), `dept avg for the month is 2 < 3: ${r.json.alerts.sent}`);
 
     const mails = alertMails();
     const low = mails.find((m) => m.subject.startsWith('ALERT: Low overall score'));
@@ -155,8 +154,6 @@ test('two consecutive low months escalate; plain low-score alert is subsumed', a
   try {
     const r = await postFeedback(base, token, { agencyLeadershipScore: 2 });
     assert.strictEqual(r.status, 201);
-    assert.ok(r.json.alerts.sent.includes('escalation'), `sent: ${r.json.alerts.sent}`);
-    assert.ok(!r.json.alerts.sent.includes('low_score'), 'escalation subsumes the low-score alert for that month');
 
     const mails = alertMails();
     const esc = mails.find((m) => m.subject.startsWith('ESCALATION:'));
@@ -180,8 +177,9 @@ test('a single low month is a low-score alert, not an escalation', async () => {
   const { server, base } = await startServer();
   try {
     const r = await postFeedback(base, token, { agencyLeadershipScore: 2 });
-    assert.ok(r.json.alerts.sent.includes('low_score'));
-    assert.ok(!r.json.alerts.sent.includes('escalation'));
+    const mails = alertMails();
+    assert.ok(mails.some((m) => m.subject.startsWith('ALERT: Low overall score')), 'low-score alert email sent');
+    assert.ok(!mails.some((m) => m.subject.startsWith('ESCALATION:')), 'no escalation email for a single low month');
   } finally {
     stopServer(server);
   }
@@ -207,17 +205,17 @@ test('month-over-month drop of >= 1.0 fires; small or no drop does not', async (
   const { server, base } = await startServer();
   try {
     const r1 = await postFeedback(base, token, { agencyLeadershipScore: 4 });
-    assert.ok(r1.json.alerts.sent.includes('mom_drop'), `5 -> 4 is a 1.0 drop: ${r1.json.alerts.sent}`);
     const dropMail = alertMails().find((m) => m.subject.startsWith('ALERT: Score drop'));
-    assert.ok(dropMail);
+    assert.ok(dropMail, 'score-drop alert email sent');
     assert.ok(dropMail.text.includes('5/5') && dropMail.text.includes('4/5') && dropMail.text.includes('1 point'));
+    captured.length = 0;
 
     const r2 = await postFeedback(base, token2, { agencyLeadershipScore: 5 });
-    assert.ok(!r2.json.alerts.sent.includes('mom_drop'), '5 -> 5 is no drop');
-    assert.deepStrictEqual(r2.json.alerts.sent, [], 'healthy steady client fires nothing');
+    assert.strictEqual(alertMails().length, 0, '5 -> 5 is no drop; steady client fires nothing');
+    captured.length = 0;
 
     const r3 = await postFeedback(base, token3, { agencyLeadershipScore: 4 });
-    assert.ok(!r3.json.alerts.sent.includes('mom_drop'), '4 -> 4 is no drop');
+    assert.strictEqual(alertMails().length, 0, '4 -> 4 is no drop');
   } finally {
     stopServer(server);
   }
@@ -232,8 +230,9 @@ test('low department average fires per department without a low overall score', 
   const { server, base } = await startServer();
   try {
     const r = await postFeedback(base, token, { creativeScore: 2, agencyLeadershipScore: 4 });
-    assert.ok(r.json.alerts.sent.includes('dept_low:creativeScore'), `sent: ${r.json.alerts.sent}`);
-    assert.ok(!r.json.alerts.sent.includes('low_score'), 'overall score 4 is fine');
+    const mails = alertMails();
+    assert.ok(mails.some((m) => m.subject.startsWith('ALERT: Creative average')), 'creative dept alert email sent');
+    assert.ok(!mails.some((m) => m.subject.startsWith('ALERT: Low overall score')), 'overall score 4 is fine');
     const mail = alertMails().find((m) => m.subject.startsWith('ALERT: Creative average'));
     assert.ok(mail && mail.subject.includes('2.00'));
   } finally {
@@ -251,7 +250,6 @@ test('healthy submission fires no alerts', async () => {
   const { server, base } = await startServer();
   try {
     const r = await postFeedback(base, token, { agencyLeadershipScore: 5 });
-    assert.deepStrictEqual(r.json.alerts.sent, [], `sent: ${r.json.alerts.sent}`);
     assert.deepStrictEqual(alertMails(), [], 'no alert emails at all');
   } finally {
     stopServer(server);

@@ -397,6 +397,13 @@ async function insertFeedback(row) {
   ]);
 }
 
+async function updateFeedbackAnalysis({ submissionId, sentiment, summary, urgency, highlights, improvementSuggestions, pdfUrl, emailSent }) {
+  await run(
+    `UPDATE feedback_reports SET sentiment = ?, summary = ?, urgency = ?, highlights = ?, improvementSuggestions = ?, pdfUrl = ?, emailSent = ? WHERE submissionId = ?`,
+    [sentiment, summary, urgency, JSON.stringify(highlights || []), JSON.stringify(improvementSuggestions || []), pdfUrl ?? '', emailSent ? 1 : 0, submissionId]
+  );
+}
+
 function rowToRecord(r) {
   return {
     ...r,
@@ -612,6 +619,7 @@ module.exports = {
   listTables,
   migrateFeedbackReports,
   insertFeedback,
+  updateFeedbackAnalysis,
   queryFeedback,
   queryFeedbackByMonth,
   getFeedbackReport,
