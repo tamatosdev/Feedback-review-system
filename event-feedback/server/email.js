@@ -1,6 +1,8 @@
 const nodemailer = require('nodemailer');
 const { DEPARTMENT_SCORES, scoreText, esc } = require('./report');
 
+const BRAND_NAME = 'Craftsmen Media';
+
 function createTransport(config) {
   return nodemailer.createTransport({
     host: config.smtpHost,
@@ -106,7 +108,7 @@ function clientFeedbackRequestBody(client, link) {
     `Your answers will only take about a minute — thank you for your time.`,
     ``,
     `Best regards,`,
-    `PureDesigners`
+    `${BRAND_NAME}`
   ].join('\n');
 }
 
@@ -114,7 +116,7 @@ async function sendClientFeedbackRequest(config, client, link) {
   const mailer = createTransport(config);
   const company = client.company_name || client.name || 'Service';
   const info = await mailer.sendMail({
-    from: `"PureDesigners" <${config.smtpUser}>`,
+    from: `"${BRAND_NAME}" <${config.smtpUser}>`,
     to: client.email,
     subject: `Your feedback matters — ${company} service update`,
     text: clientFeedbackRequestBody(client, link)
@@ -141,11 +143,11 @@ async function sendNoFeedbackEmail(config, from, to) {
 // ---------- Phase 3: automated alert emails ----------
 
 function wrapAlertContent(title, lines) {
-  const text = [title, '', ...lines, '', '— PureDesigners Client Feedback System'].join('\n');
+  const text = [title, '', ...lines, '', `— ${BRAND_NAME} Client Feedback System`].join('\n');
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
     `<p style="font-weight:bold;font-size:16px;margin:0 0 10px">${esc(title)}</p>` +
     lines.map((l) => `<p style="margin:0 0 6px">${l ? esc(l) : '&nbsp;'}</p>`).join('') +
-    `<p style="margin:16px 0 0;color:#6b7280;font-size:12px">— PureDesigners Client Feedback System</p></div>`;
+    `<p style="margin:16px 0 0;color:#6b7280;font-size:12px">— ${BRAND_NAME} Client Feedback System</p></div>`;
   return { text, html };
 }
 
