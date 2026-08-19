@@ -1,28 +1,28 @@
-﻿{
-    "rewrites":  [
-                     {
-                         "source":  "/(.*)",
-                         "destination":  "/api"
-                     }
-                 ],
-    "functions":  {
-                      "api/index.js":  {
-                                           "maxDuration":  60,
-                                           "memory":  1024
-                                       }
-                  },
-    "crons":  [
-                  {
-                      "path":  "/api/cron/monthly-send",
-                      "schedule":  "0 9 1 * *"
-                  },
-                  {
-                      "path":  "/api/cron/six-month-report",
-                      "schedule":  "0 9 1 1,7 *"
-                  },
-                  {
-                      "path":  "/api/cron/no-response-check",
-                      "schedule":  "0 10 * * *"
-                  }
-              ]
+{
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/api"
+    }
+  ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 60,
+      "memory": 1024
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/monthly-send",
+      "schedule": "0 9 1 * *"
+    },
+    {
+      "path": "/api/cron/six-month-report",
+      "schedule": "0 9 1 1,7 *"
+    },
+    {
+      "path": "/api/cron/no-response-check",
+      "schedule": "0 10 * * *"
+    }
+  ]
 }
