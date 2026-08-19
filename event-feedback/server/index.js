@@ -799,7 +799,6 @@ const RATING_QUESTIONS = [
 ];
 
 const SCALE_LABELS = ['Very Poor', 'Poor', 'Satisfactory', 'Good', 'Excellent'];
-const INTRO_TEXT = 'At Craftsmen Media, we take pride in the work we do and believe that great partnerships are built on consistent improvement. Your feedback helps us understand what we are doing well and where we can do better, enabling us to continuously strengthen the quality of our work, service, and partnership with you. We would appreciate a few minutes of your time to share your experience with us over the past month.';
 
 function ratingQuestionsScript() {
   return `
@@ -867,11 +866,6 @@ function feedbackFormPage(client, request, logoPath) {
       <h1 class="mt-4 text-2xl font-extrabold tracking-tight">Client Feedback</h1>
       <p class="text-sm text-gray-500 mt-1">We value your feedback and appreciate your time.</p>
       <p class="text-xs text-gray-400 mt-2">${linkNotice}</p>
-    </div>
-
-    <div class="bg-white border-2 border-brand rounded-3xl shadow-lg p-6 sm:p-8 mb-5 text-sm text-gray-600 leading-relaxed">
-      ${esc(INTRO_TEXT)}
-      <p class="mt-3 text-xs font-bold text-gray-500">Rating scale: 1 – Very Poor &nbsp;·&nbsp; 2 – Poor &nbsp;·&nbsp; 3 – Satisfactory &nbsp;·&nbsp; 4 – Good &nbsp;·&nbsp; 5 – Excellent</p>
     </div>
 
     <form id="feedbackForm" class="bg-white border-2 border-brand rounded-3xl shadow-lg p-6 sm:p-8 space-y-5">
