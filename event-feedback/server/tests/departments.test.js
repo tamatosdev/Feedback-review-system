@@ -3,18 +3,21 @@ const assert = require('node:assert');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const http = require('http');
 
 // Force local SQLite + in-memory report storage before anything is required
 // (dotenv must not flip us into Postgres/Supabase mode).
 process.env.DB_PATH = path.join(os.tmpdir(), `feedback-departments-test-${process.pid}.db`);
 process.env.DATABASE_URL = '';
 process.env.STORAGE_DRIVER = 'memory';
+process.env.SYNC_SECRET = 'test-secret';
 
-const { db, insertFeedback, getFeedbackReport, queryFeedback, insertClient, updateClientAccountManager, upsertClientByEmail, getClient } = require('../db');
+const { db, insertFeedback, getFeedbackReport, queryFeedback, insertClient, upsertClientByEmail, getClient } = require('../db');
 const { reportHTML, combinedHTML } = require('../report');
 const { buildPdf } = require('../pdf');
 const { feedbackEmailBody } = require('../email');
-const app = require('../index.js');
+let app;
+let csvServer;
 
 const SCORES = {
   accountManagementScore: 5,
@@ -55,9 +58,20 @@ test.before(async () => {
   db.exec('DELETE FROM feedback_requests');
   db.exec('DELETE FROM clients');
   db.exec('DELETE FROM feedback_reports');
+
+  // Serve a published-sheet-style CSV with only a Name column (no Company Name)
+  // so the pull sync endpoint can be exercised end-to-end.
+  csvServer = http.createServer((req, res) => {
+    res.setHeader('Content-Type', 'text/csv');
+    res.end('Name,Email,Service Type,Status\nSheet Co,sheetentry@test.com,Retainer,active\n');
+  });
+  await new Promise((resolve) => csvServer.listen(0, resolve));
+  process.env.SHEET_CSV_URL = `http://127.0.0.1:${csvServer.address().port}/clients.csv`;
+  app = require('../index.js');
 });
 
 test.after(async () => {
+  if (csvServer) await new Promise((resolve) => csvServer.close(resolve));
   await app.flushBackground();
   db.close();
   for (const suffix of ['', '-wal', '-shm']) {
@@ -150,23 +164,17 @@ test('feedbackEmailBody includes all six department scores', () => {
   assert.strictEqual((oldBody.match(/N\/A/g) || []).length, 6, 'legacy scores show N/A in email');
 });
 
-test('client account_manager: insert, update, and sync upsert preserve values', async () => {
-  const client = await insertClient({ name: 'AM Corp', email: 'am@corp.com', account_manager: 'Tahir Raza' });
-  assert.strictEqual(client.account_manager, 'Tahir Raza');
+test('client upsert by email: updates existing and inserts new without touching account_manager', async () => {
+  const client = await insertClient({ name: 'AM Corp', email: 'am@corp.com' });
 
-  const updated = await updateClientAccountManager(client.id, 'Jane Doe');
-  assert.strictEqual(updated.account_manager, 'Jane Doe');
-
-  const fromDb = await getClient(client.id);
-  assert.strictEqual(fromDb.account_manager, 'Jane Doe');
-
-  const { action } = await upsertClientByEmail({ name: 'AM Corp', email: 'am@corp.com', account_manager: '' });
+  const { action } = await upsertClientByEmail({ name: 'AM Corp Renamed', email: 'am@corp.com' });
   assert.strictEqual(action, 'updated');
-  assert.strictEqual((await getClient(client.id)).account_manager, 'Jane Doe', 'empty value must not wipe existing account manager');
+  const fromDb = await getClient(client.id);
+  assert.strictEqual(fromDb.name, 'AM Corp Renamed');
 
-  const first = await upsertClientByEmail({ name: 'New Co', email: 'new@co.com', account_manager: 'Bob' });
+  const first = await upsertClientByEmail({ name: 'New Co', email: 'new@co.com' });
   assert.strictEqual(first.action, 'inserted');
-  assert.strictEqual(first.row.account_manager, 'Bob');
+  assert.strictEqual(first.row.name, 'New Co');
 });
 
 test('POST /api/feedback stores all six scores and returns them; missing score -> 400', async () => {
@@ -221,25 +229,85 @@ test('POST /api/feedback stores all six scores and returns them; missing score -
   }
 });
 
-test('POST /api/clients + PATCH save account_manager', async () => {
+test('POST /api/clients + PATCH update status', async () => {
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
     const created = await (await fetch(`${base}/api/clients`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'API Client', email: 'api@client.com', account_manager: 'Tahir Raza' })
+      body: JSON.stringify({ name: 'API Client', email: 'api@client.com' })
     })).json();
     assert.strictEqual(created.ok, true);
-    assert.strictEqual(created.data.account_manager, 'Tahir Raza');
+    assert.strictEqual(created.data.name, 'API Client');
+    assert.strictEqual(created.data.status, 'active');
 
     const patched = await (await fetch(`${base}/api/clients/${created.data.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ account_manager: 'Zain Qureshi' })
+      body: JSON.stringify({ status: 'inactive' })
     })).json();
     assert.strictEqual(patched.ok, true);
-    assert.strictEqual(patched.data.account_manager, 'Zain Qureshi');
+    assert.strictEqual(patched.data.status, 'inactive');
+  } finally {
+    if (server.closeAllConnections) server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('POST /api/clients/sync upserts rows with just Name/Email columns (no Company Name required)', async () => {
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/api/clients/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Sync-Secret': 'test-secret' },
+      body: JSON.stringify({ clients: [{ Name: 'Sync Only', Email: 'only@sync.com', 'Service Type': 'Retainer', Status: 'active' }] })
+    });
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.inserted, 1);
+    assert.strictEqual(json.updated, 0);
+    assert.deepStrictEqual(json.skipped, []);
+
+    const fromDb = db.prepare('SELECT * FROM clients WHERE email = ?').get('only@sync.com');
+    assert.strictEqual(fromDb.name, 'Sync Only');
+    assert.strictEqual(fromDb.service_type, 'Retainer');
+    assert.strictEqual(fromDb.company_name, null, 'company_name column stays untouched');
+
+    const second = await fetch(`${base}/api/clients/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Sync-Secret': 'test-secret' },
+      body: JSON.stringify({ clients: [{ Name: 'Sync Only 2', Email: 'only@sync.com' }] })
+    });
+    const secondJson = await second.json();
+    assert.strictEqual(secondJson.updated, 1, 'same email upserts, does not duplicate');
+    assert.strictEqual(db.prepare('SELECT * FROM clients WHERE email = ?').get('only@sync.com').name, 'Sync Only 2');
+  } finally {
+    if (server.closeAllConnections) server.closeAllConnections();
+    server.close();
+  }
+});
+
+test('POST /api/clients/sync-from-sheet pulls a CSV with only a Name column', async () => {
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/api/clients/sync-from-sheet`, {
+      method: 'POST',
+      headers: { 'X-Sync-Secret': 'test-secret' }
+    });
+    assert.strictEqual(res.status, 200);
+    const json = await res.json();
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.inserted, 1);
+
+    const stored = (await db.prepare('SELECT * FROM clients WHERE email = ?').get('sheetentry@test.com'));
+    assert.ok(stored, 'row from CSV stored');
+    assert.strictEqual(stored.name, 'Sheet Co');
+    assert.strictEqual(stored.service_type, 'Retainer');
+    assert.strictEqual(stored.company_name, null, 'company_name stays null without a Company Name column');
   } finally {
     if (server.closeAllConnections) server.closeAllConnections();
     server.close();

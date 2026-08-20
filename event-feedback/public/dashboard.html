@@ -57,14 +57,10 @@
         </div>
       </div>
 
-      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-xs font-bold mb-2">Client</label>
           <select id="clientSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
-        </div>
-        <div>
-          <label class="block text-xs font-bold mb-2">Account Manager</label>
-          <select id="amSel" class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand"></select>
         </div>
         <div>
           <label class="block text-xs font-bold mb-2">Rating / Status</label>
@@ -194,8 +190,8 @@
   <script>
     const $ = (id) => document.getElementById(id);
 
-    const state = { sentiment: '', range: 'currm', client: '', accountManager: '', status: '', department: '' };
-    let meta = { departments: [], clients: [], accountManagers: [] };
+    const state = { sentiment: '', range: 'currm', client: '', status: '', department: '' };
+    let meta = { departments: [], clients: [] };
     let deptData = null;
     let deptSort = { key: 'name', dir: 1 };
 
@@ -240,7 +236,7 @@
 
     function clientLabel(r) {
       const client = meta.clients.find((c) => String(c.id) === String(r.client_id));
-      return r.companyName || (client && (client.company_name || client.name)) || r.attendeeName || '—';
+      return (client && client.name) || r.attendeeName || '—';
     }
 
     function fmtDate(d) {
@@ -296,9 +292,7 @@
 
     function populateSelects() {
       $('clientSel').innerHTML = '<option value="">All Clients</option>' + meta.clients.map((c) =>
-        `<option value="${c.id}">${esc(c.name)}${c.company_name ? ' — ' + esc(c.company_name) : ''}</option>`).join('');
-      $('amSel').innerHTML = '<option value="">All Account Managers</option>' + meta.accountManagers.map((a) =>
-        `<option value="${esc(a)}">${esc(a)}</option>`).join('');
+        `<option value="${c.id}">${esc(c.name)}</option>`).join('');
       $('statusSel').innerHTML = STATUS_OPTIONS.map((s) =>
         `<option value="${s.key}">${s.label}</option>`).join('');
       $('deptSel').innerHTML = '<option value="">All Departments</option>' + meta.departments.map((d) =>
@@ -311,7 +305,6 @@
       if ($('filterTo').value) p.set('to', $('filterTo').value);
       if (state.sentiment) p.set('sentiment', state.sentiment);
       if (state.client) p.set('client', state.client);
-      if (state.accountManager) p.set('accountManager', state.accountManager);
       if (state.status) p.set('status', state.status);
       return p;
     }
@@ -383,7 +376,7 @@
     }
 
     function renderKpis(data) {
-      $('kpiRangeLabel').textContent = (data.range.fromYm === '0000-01' ? 'All time' : data.range.fromYm + ' → ' + data.range.toYm) + (state.client || state.accountManager ? ' · filtered' : '');
+      $('kpiRangeLabel').textContent = (data.range.fromYm === '0000-01' ? 'All time' : data.range.fromYm + ' → ' + data.range.toYm) + (state.client ? ' · filtered' : '');
       const six = data.kpis.slice(0, 6);
       $('kpiCards').innerHTML = six.map(kpiCard).join('') + responseRateCard(data.kpis[6]) + attentionCard(data.kpis[7]);
       const hasData = six.some((k) => k.score !== null) || data.kpis[6].total > 0;
@@ -586,7 +579,7 @@
       });
       $('deptClientBody').innerHTML = sorted.map((c) => `
         <tr class="hover:bg-gray-50/60 transition">
-          <td class="px-5 py-4 font-bold">${esc(c.name)}<div class="text-xs font-normal text-gray-400">${c.accountManager ? esc(c.accountManager) : 'no account manager'}</div></td>
+          <td class="px-5 py-4 font-bold">${esc(c.name)}</td>
           <td class="px-5 py-4">${scoreText(c.avg)} ${statusBadge(c.avgStatus)}</td>
           <td class="px-5 py-4 font-semibold">${c.count}</td>
           <td class="px-5 py-4">${scoreText(c.latest)} ${statusBadge(c.latestStatus)}</td>
@@ -632,10 +625,6 @@
       if (!kpiRes.ok || !kpiJson.ok) throw new Error(kpiJson.error || 'Failed to load dashboard KPIs.');
       let list = (await listRes.json()).data;
       if (state.client) list = list.filter((r) => String(r.client_id) === String(state.client));
-      if (state.accountManager) {
-        const amIds = new Set(meta.clients.filter((c) => c.account_manager === state.accountManager).map((c) => String(c.id)));
-        list = list.filter((r) => amIds.has(String(r.client_id)));
-      }
 
       $('rowCount').textContent = list.length + ' result(s)';
       $('emptyState').classList.toggle('hidden', list.length > 0);
@@ -672,12 +661,10 @@
       $('filterFrom').value = '';
       $('filterTo').value = '';
       $('clientSel').value = '';
-      $('amSel').value = '';
       $('statusSel').value = '';
       $('deptSel').value = '';
       state.sentiment = '';
       state.client = '';
-      state.accountManager = '';
       state.status = '';
       state.department = '';
       state.range = 'alltime';
@@ -695,7 +682,6 @@
     $('filterTo').addEventListener('input', () => { if ($('filterFrom').value || $('filterTo').value) { state.range = ''; renderRangeButtons(); } });
 
     $('clientSel').addEventListener('change', () => { state.client = $('clientSel').value; loadAll(); });
-    $('amSel').addEventListener('change', () => { state.accountManager = $('amSel').value; loadAll(); });
     $('statusSel').addEventListener('change', () => { state.status = $('statusSel').value; loadAll(); });
     $('deptSel').addEventListener('change', () => { state.department = $('deptSel').value; loadAll(); });
 

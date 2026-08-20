@@ -107,7 +107,7 @@ test('queryFeedbackByMonth filters by YYYY-MM range', async () => {
   assert.strictEqual(inRange[0].submissionId, 'FB-TEST1');
 });
 
-test('migrateFeedbackReports renames legacy columns and adds department scores + account_manager', () => {
+test('migrateFeedbackReports renames legacy columns, adds department scores, and keeps the account_manager column in the clients schema', () => {
   const oldDb = new Database(':memory:');
   oldDb.exec(`
     CREATE TABLE clients (

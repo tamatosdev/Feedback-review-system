@@ -96,7 +96,7 @@ async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
 }
 
 function clientFeedbackRequestBody(client, link) {
-  const company = client.company_name || client.name || 'your service';
+  const company = client.name || 'your service';
   return [
     `Hi ${client.name},`,
     ``,
@@ -114,7 +114,7 @@ function clientFeedbackRequestBody(client, link) {
 
 async function sendClientFeedbackRequest(config, client, link) {
   const mailer = createTransport(config);
-  const company = client.company_name || client.name || 'Service';
+  const company = client.name || 'Service';
   const info = await mailer.sendMail({
     from: `"${BRAND_NAME}" <${config.smtpUser}>`,
     to: client.email,
@@ -197,8 +197,8 @@ function escalationAlertContent({ client, score, month, streak, months, threshol
   ]) };
 }
 
-function noResponseClientReminderContent({ name, company_name, service_type }, month, days, link) {
-  const company = company_name || name || 'your service';
+function noResponseClientReminderContent({ name, service_type }, month, days, link) {
+  const company = name || 'your service';
   const subject = `Reminder: Monthly feedback for ${company} (${month})`;
   return { subject, ...wrapAlertContent(subject, [
     `Hi ${name},`,

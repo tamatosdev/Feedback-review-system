@@ -186,7 +186,7 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
 
   const rows = await allRows(`
     SELECT fr.id AS request_id, fr.client_id, fr.month, fr.token, fr.sent_at,
-           c.name, c.email, c.company_name, c.service_type
+           c.name, c.email, c.service_type
     FROM feedback_requests fr
     JOIN clients c ON c.id = fr.client_id
     WHERE fr.submitted = 0 AND c.status = 'active' AND substr(fr.month, 1, 7) = ?
@@ -216,7 +216,7 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
         await email.sendAlertEmail(smtpConfig, {
           to: r.email,
           ...email.noResponseClientReminderContent(
-            { name: r.name, company_name: r.company_name, service_type: r.service_type },
+            { name: r.name, service_type: r.service_type },
             month,
             days,
             `${base}/feedback/${r.token}`

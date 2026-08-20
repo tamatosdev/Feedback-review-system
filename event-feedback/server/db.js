@@ -38,11 +38,9 @@ const COLUMN_ALIASES = {
   pdfurl: 'pdfUrl',
   emailsent: 'emailSent',
   created_at: 'created_at',
-  company_name: 'company_name',
   service_type: 'service_type',
   sent_at: 'sent_at',
   submitted: 'submitted',
-  account_manager: 'account_manager',
   account_management_score: 'accountManagementScore',
   strategy_score: 'strategyScore',
   creative_score: 'creativeScore',
@@ -494,18 +492,16 @@ async function stats({ from, to } = {}) {
 
 // ---------- Clients ----------
 
-async function insertClient({ name, email, company_name = '', service_type = '', status = 'active', account_manager = '' }) {
+async function insertClient({ name, email, service_type = '', status = 'active' }) {
   return runReturning(`
-    INSERT INTO clients (name, email, company_name, service_type, status, account_manager, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO clients (name, email, service_type, status, created_at)
+    VALUES (?, ?, ?, ?, ?)
     RETURNING *
   `, [
     String(name || '').trim(),
     String(email || '').trim(),
-    String(company_name || '').trim(),
     String(service_type || '').trim(),
     status === 'inactive' ? 'inactive' : 'active',
-    String(account_manager || '').trim() || null,
     new Date().toISOString()
   ]);
 }
@@ -532,24 +528,16 @@ async function updateClientStatus(id, status) {
   return row || null;
 }
 
-async function updateClientAccountManager(id, accountManager) {
-  const row = await runReturning(
-    'UPDATE clients SET account_manager = ? WHERE id = ? RETURNING *',
-    [String(accountManager || '').trim() || null, id]
-  );
-  return row || null;
-}
-
-async function upsertClientByEmail({ name, email, company_name = '', service_type = '', status = 'active', account_manager = '' }) {
+async function upsertClientByEmail({ name, email, service_type = '', status = 'active' }) {
   const existing = await getRow('SELECT * FROM clients WHERE lower(email) = lower(?)', [email]);
   if (existing) {
     const row = await runReturning(
-      'UPDATE clients SET name = ?, company_name = ?, service_type = ?, status = ?, account_manager = ? WHERE id = ? RETURNING *',
-      [name, company_name, service_type, status, String(account_manager || '').trim() || existing.account_manager || null, existing.id]
+      'UPDATE clients SET name = ?, service_type = ?, status = ? WHERE id = ? RETURNING *',
+      [name, service_type, status, existing.id]
     );
     return { action: 'updated', row };
   }
-  return { action: 'inserted', row: await insertClient({ name, email, company_name, service_type, status, account_manager }) };
+  return { action: 'inserted', row: await insertClient({ name, email, service_type, status }) };
 }
 
 async function deleteClient(id) {
@@ -631,7 +619,6 @@ module.exports = {
   listClients,
   listClientEmails,
   updateClientStatus,
-  updateClientAccountManager,
   upsertClientByEmail,
   deleteClient,
   insertFeedbackRequest,

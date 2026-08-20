@@ -42,7 +42,7 @@ function submitBody(overrides = {}) {
   };
 }
 
-test('tokenized form page has no service/project input and no eventName field', async () => {
+test('tokenized form page has no service/project input, no eventName field, and no company name field', async () => {
   const client = await insertClient({ name: 'Form Client', email: 'form@client.com', service_type: 'Branding Package' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
@@ -56,6 +56,9 @@ test('tokenized form page has no service/project input and no eventName field', 
     assert.ok(!html.includes('name="eventName"'), 'form must not submit an eventName field');
     assert.ok(!html.includes('id="eventName"'), 'no service input rendered');
     assert.ok(!html.includes('>Service</label>') && !html.includes('for="eventName"'), 'no Service label rendered');
+    assert.ok(!html.includes('name="companyName"'), 'no company name field rendered');
+    assert.ok(!html.includes('id="companyName"'), 'no company name input rendered');
+    assert.ok(html.includes('value="Form Client"'), 'Name field is pre-filled from the client name');
     assert.ok(html.includes('name="token"'), 'hidden token still present');
     assert.ok(html.includes('ratingQuestions'), 'rating questions still rendered');
   } finally {

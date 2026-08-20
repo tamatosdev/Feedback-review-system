@@ -262,7 +262,7 @@ test('no-response check: old request -> client reminder + internal alert, once o
   const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString();
 
-  const oldClient = await insertClient({ name: 'Silent Client', email: 'silent@alerts.test', company_name: 'Silent Co' });
+  const oldClient = await insertClient({ name: 'Silent Client', email: 'silent@alerts.test' });
   const oldReq = (await insertFeedbackRequest({ client_id: oldClient.id, month: currentYm, token: crypto.randomUUID() })).row;
   db.prepare('UPDATE feedback_requests SET sent_at = ? WHERE id = ?').run(tenDaysAgo, oldReq.id);
 

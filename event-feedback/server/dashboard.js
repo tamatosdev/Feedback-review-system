@@ -64,21 +64,17 @@ function resolveDepartment(name) {
   );
 }
 
-function filterClauses({ client, accountManager }, alias) {
+function filterClauses({ client }, alias) {
   const where = [];
   const params = [];
   if (client) {
     where.push(`${alias}.client_id = ?`);
     params.push(Number(client));
   }
-  if (accountManager) {
-    where.push(`${alias}.client_id IN (SELECT id FROM clients WHERE account_manager = ?)`);
-    params.push(accountManager);
-  }
   return { where, params };
 }
 
-function validateFilters({ client, accountManager, status }) {
+function validateFilters({ client, status }) {
   if (client && !Number.isFinite(Number(client))) {
     const err = new Error(`Invalid client filter "${client}" — must be a client id.`);
     err.status = 400;
@@ -91,10 +87,10 @@ function validateFilters({ client, accountManager, status }) {
   }
 }
 
-async function loadSeries({ fromYm, toYm, client, accountManager }) {
+async function loadSeries({ fromYm, toYm, client }) {
   const where = ['substr(fr.month, 1, 7) BETWEEN ? AND ?'];
   const params = [fromYm, toYm];
-  const fc = filterClauses({ client, accountManager }, 'fr');
+  const fc = filterClauses({ client }, 'fr');
   where.push(...fc.where);
   params.push(...fc.params);
   const scoreAggs = DEPARTMENTS.map(
@@ -116,10 +112,10 @@ async function loadSeries({ fromYm, toYm, client, accountManager }) {
   return { rows, byMonth };
 }
 
-async function rangeAverages({ fromYm, toYm, client, accountManager }) {
+async function rangeAverages({ fromYm, toYm, client }) {
   const where = ['substr(fr.month, 1, 7) BETWEEN ? AND ?'];
   const params = [fromYm, toYm];
-  const fc = filterClauses({ client, accountManager }, 'fr');
+  const fc = filterClauses({ client }, 'fr');
   where.push(...fc.where);
   params.push(...fc.params);
   const scoreAggs = DEPARTMENTS.map(
@@ -139,10 +135,10 @@ async function rangeAverages({ fromYm, toYm, client, accountManager }) {
   return out;
 }
 
-async function responseRate({ fromYm, toYm, client, accountManager }) {
+async function responseRate({ fromYm, toYm, client }) {
   const where = ['substr(fr.month, 1, 7) BETWEEN ? AND ?'];
   const params = [fromYm, toYm];
-  const fc = filterClauses({ client, accountManager }, 'fr');
+  const fc = filterClauses({ client }, 'fr');
   where.push(...fc.where);
   params.push(...fc.params);
   const row = await getRow(`
@@ -157,10 +153,10 @@ async function responseRate({ fromYm, toYm, client, accountManager }) {
   return { total, submitted, percent: total ? Math.round((submitted / total) * 1000) / 10 : null };
 }
 
-async function latestAgencyScores({ fromYm, toYm, client, accountManager }) {
+async function latestAgencyScores({ fromYm, toYm, client }) {
   const where = ['substr(fr.month, 1, 7) BETWEEN ? AND ?', 'fr.agency_leadership_score IS NOT NULL'];
   const params = [fromYm, toYm];
-  const fc = filterClauses({ client, accountManager }, 'fr');
+  const fc = filterClauses({ client }, 'fr');
   where.push(...fc.where);
   params.push(...fc.params);
   const rows = await allRows(`
@@ -222,19 +218,19 @@ function historySeries(byMonth, key, toYm) {
   });
 }
 
-async function dashboardKpis({ from, to, client, accountManager } = {}) {
-  validateFilters({ client, accountManager });
+async function dashboardKpis({ from, to, client } = {}) {
+  validateFilters({ client });
   const { fromYm, toYm } = rangeYm(from, to);
   const wideFrom = [fromYm, addMonths(toYm, -5)].sort()[0];
-  const hasFilters = !!(client || accountManager);
+  const hasFilters = !!client;
 
   const [series, agencySeries, rangeAvg, agencyRangeAvg, rate, latest] = await Promise.all([
-    loadSeries({ fromYm: wideFrom, toYm, client, accountManager }),
+    loadSeries({ fromYm: wideFrom, toYm, client }),
     hasFilters ? loadSeries({ fromYm: wideFrom, toYm }) : null,
-    rangeAverages({ fromYm, toYm, client, accountManager }),
+    rangeAverages({ fromYm, toYm, client }),
     hasFilters ? rangeAverages({ fromYm, toYm }) : null,
-    responseRate({ fromYm, toYm, client, accountManager }),
-    latestAgencyScores({ fromYm, toYm, client, accountManager })
+    responseRate({ fromYm, toYm, client }),
+    latestAgencyScores({ fromYm, toYm, client })
   ]);
   const agency = agencySeries || series;
   const agencyAvg = agencyRangeAvg || rangeAvg;
@@ -287,28 +283,28 @@ async function dashboardKpis({ from, to, client, accountManager } = {}) {
   };
 }
 
-async function clientDepartmentRows({ column, fromYm, toYm, client, accountManager }) {
+async function clientDepartmentRows({ column, fromYm, toYm, client }) {
   const where = ['substr(fr.month, 1, 7) BETWEEN ? AND ?', `fr.${column} IS NOT NULL`];
   const params = [fromYm, toYm];
-  const fc = filterClauses({ client, accountManager }, 'fr');
+  const fc = filterClauses({ client }, 'fr');
   where.push(...fc.where);
   params.push(...fc.params);
   return allRows(`
-    SELECT fr.client_id, c.name, c.account_manager,
+    SELECT fr.client_id, c.name,
       CAST(AVG(fr.${column}) AS REAL) AS avg,
       CAST(COUNT(*) AS INTEGER) AS cnt,
       MAX(fr.timestamp) AS latest_ts
     FROM feedback_reports fr
     JOIN clients c ON c.id = fr.client_id
     WHERE ${where.join(' AND ')}
-    GROUP BY fr.client_id, c.name, c.account_manager
+    GROUP BY fr.client_id, c.name
   `, params);
 }
 
-async function latestDepartmentScores({ column, fromYm, toYm, client, accountManager }) {
+async function latestDepartmentScores({ column, fromYm, toYm, client }) {
   const where = ['substr(fr.month, 1, 7) BETWEEN ? AND ?', `fr.${column} IS NOT NULL`];
   const params = [fromYm, toYm];
-  const fc = filterClauses({ client, accountManager }, 'fr');
+  const fc = filterClauses({ client }, 'fr');
   where.push(...fc.where);
   params.push(...fc.params);
   const rows = await allRows(`
@@ -328,8 +324,8 @@ async function latestDepartmentScores({ column, fromYm, toYm, client, accountMan
   return byClient;
 }
 
-async function dashboardDepartment(name, { from, to, client, accountManager, status } = {}) {
-  validateFilters({ client, accountManager, status });
+async function dashboardDepartment(name, { from, to, client, status } = {}) {
+  validateFilters({ client, status });
   const dept = resolveDepartment(name);
   if (!dept) {
     const err = new Error(`Unknown department "${name}". Use one of: ${DEPARTMENTS.map((d) => d.label).join(', ')}.`);
@@ -338,15 +334,15 @@ async function dashboardDepartment(name, { from, to, client, accountManager, sta
   }
   const { fromYm, toYm } = rangeYm(from, to);
   const wideFrom = [fromYm, addMonths(toYm, -5)].sort()[0];
-  const hasFilters = !!(client || accountManager);
+  const hasFilters = !!client;
 
   const [series, agencyRangeAvg, clientRows, latestDept, latestAgency, rangeAvg] = await Promise.all([
-    loadSeries({ fromYm: wideFrom, toYm, client, accountManager }),
+    loadSeries({ fromYm: wideFrom, toYm, client }),
     rangeAverages({ fromYm, toYm }),
-    clientDepartmentRows({ column: dept.column, fromYm, toYm, client, accountManager }),
-    latestDepartmentScores({ column: dept.column, fromYm, toYm, client, accountManager }),
-    latestAgencyScores({ fromYm, toYm, client, accountManager }),
-    rangeAverages({ fromYm, toYm, client, accountManager })
+    clientDepartmentRows({ column: dept.column, fromYm, toYm, client }),
+    latestDepartmentScores({ column: dept.column, fromYm, toYm, client }),
+    latestAgencyScores({ fromYm, toYm, client }),
+    rangeAverages({ fromYm, toYm, client })
   ]);
 
   const agencyStatus = {};
@@ -360,7 +356,6 @@ async function dashboardDepartment(name, { from, to, client, accountManager, sta
       return {
         clientId: r.client_id,
         name: r.name,
-        accountManager: r.account_manager,
         avg: round2(avg),
         latest,
         count: r.cnt,
@@ -429,15 +424,11 @@ async function dashboardDepartment(name, { from, to, client, accountManager, sta
 async function dashboardMeta() {
   const clients = (await listClients()).map((c) => ({
     id: c.id,
-    name: c.name,
-    company_name: c.company_name,
-    account_manager: c.account_manager
+    name: c.name
   }));
-  const accountManagers = [...new Set(clients.map((c) => c.account_manager).filter(Boolean))].sort();
   return {
     departments: DEPARTMENTS.map((d) => ({ key: d.key, label: d.label })),
-    clients,
-    accountManagers
+    clients
   };
 }
 

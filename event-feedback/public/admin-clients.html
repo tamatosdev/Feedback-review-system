@@ -57,9 +57,9 @@
     <!-- Add client -->
     <section class="bg-white border border-gray-100 rounded-2xl shadow-md p-5 space-y-4">
       <h2 class="font-extrabold text-sm uppercase tracking-wider text-gray-500">Add New Client</h2>
-      <form id="clientForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end">
+      <form id="clientForm" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
         <div>
-          <label for="name" class="block text-xs font-bold mb-1">Name *</label>
+          <label for="name" class="block text-xs font-bold mb-1">Client Name *</label>
           <input id="name" name="name" type="text" required placeholder="Client name"
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
@@ -69,18 +69,8 @@
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
-          <label for="companyName" class="block text-xs font-bold mb-1">Company Name</label>
-          <input id="companyName" name="companyName" type="text" placeholder="Optional"
-            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div>
           <label for="serviceType" class="block text-xs font-bold mb-1">Service Type</label>
           <input id="serviceType" name="serviceType" type="text" placeholder="e.g. Branding Package"
-            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div>
-          <label for="accountManager" class="block text-xs font-bold mb-1">Account Manager</label>
-          <input id="accountManager" name="accountManager" type="text" placeholder="e.g. Tahir Raza"
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
@@ -91,7 +81,7 @@
             <option value="inactive">Inactive</option>
           </select>
         </div>
-        <div class="sm:col-span-2 lg:col-span-5">
+        <div class="sm:col-span-2 lg:col-span-4">
           <button type="submit" id="addBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition disabled:opacity-50 disabled:cursor-not-allowed">Add Client</button>
         </div>
       </form>
@@ -109,10 +99,9 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
             <tr>
-              <th class="px-5 py-3 font-bold">Name</th>
+              <th class="px-5 py-3 font-bold">Client Name</th>
               <th class="px-5 py-3 font-bold">Email</th>
               <th class="px-5 py-3 font-bold">Service Type</th>
-              <th class="px-5 py-3 font-bold">Account Manager</th>
               <th class="px-5 py-3 font-bold">Status</th>
               <th class="px-5 py-3 font-bold">Created</th>
               <th class="px-5 py-3 font-bold">Actions</th>
@@ -158,13 +147,9 @@
       $('emptyState').classList.toggle('hidden', list.length > 0);
       $('tableBody').innerHTML = list.map((c) => `
         <tr class="hover:bg-gray-50/60 transition">
-          <td class="px-5 py-4 font-bold">${esc(c.name)}<div class="text-xs font-normal text-gray-400">${esc(c.company_name || '—')}</div></td>
+          <td class="px-5 py-4 font-bold">${esc(c.name)}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.email)}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.service_type || '—')}</td>
-          <td class="px-5 py-4 text-gray-600">
-            ${esc(c.account_manager || '—')}
-            <button data-action="accountManager" data-id="${c.id}" data-account-manager="${esc(c.account_manager || '')}" class="ml-2 text-xs font-bold text-brandDark underline underline-offset-2 hover:text-ink" title="Edit account manager">edit</button>
-          </td>
           <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${statusClasses[c.status] || 'bg-gray-100 text-gray-600'}">${esc(c.status)}</span></td>
           <td class="px-5 py-4 text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</td>
           <td class="px-5 py-4 whitespace-nowrap space-x-3">
@@ -224,26 +209,6 @@
         const json = await res.json();
         if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to update status.');
         showMessage(`Client "${json.data.name}" is now ${next}.`, false);
-        await loadClients();
-      } catch (err) {
-        showMessage(err.message, true);
-      }
-    }
-
-    async function editAccountManager(id, current) {
-      const name = prompt('Account Manager for this client:', current || '');
-      if (name === null) return;
-      const value = name.trim();
-      if (value === current) return;
-      try {
-        const res = await fetch(`/api/clients/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ account_manager: value })
-        });
-        const json = await res.json();
-        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to update account manager.');
-        showMessage(`Account manager for "${json.data.name}" saved.`, false);
         await loadClients();
       } catch (err) {
         showMessage(err.message, true);
@@ -318,7 +283,7 @@
       const name = $('name').value.trim();
       const email = $('email').value.trim();
       if (!name) {
-        $('formError').textContent = 'Name is required.';
+        $('formError').textContent = 'Client name is required.';
         $('formError').classList.remove('hidden');
         return;
       }
@@ -330,9 +295,7 @@
       addClient({
         name,
         email,
-        company_name: $('companyName').value.trim(),
         service_type: $('serviceType').value.trim(),
-        account_manager: $('accountManager').value.trim(),
         status: $('status').value
       });
     });
@@ -342,7 +305,6 @@
       if (!btn) return;
       if (btn.dataset.action === 'toggle') toggleClient(btn.dataset.id, btn.dataset.status);
       if (btn.dataset.action === 'delete') deleteClient(btn.dataset.id, btn.dataset.name);
-      if (btn.dataset.action === 'accountManager') editAccountManager(btn.dataset.id, btn.dataset.accountManager);
     });
 
     $('logoutBtn').addEventListener('click', async () => {

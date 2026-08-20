@@ -7,6 +7,6 @@ console.log('requests:', db.prepare('SELECT COUNT(*) c FROM feedback_requests').
 console.log('reports rows:');
 console.table(db.prepare('SELECT submissionId, month, serviceType, client_id, agency_leadership_score, account_management_score, strategy_score, creative_score, design_content_score, social_content_score FROM feedback_reports ORDER BY month').all());
 console.log('clients rows:');
-console.table(db.prepare('SELECT id, name, email, account_manager, status FROM clients').all());
+console.table(db.prepare('SELECT id, name, email, status FROM clients').all());
 console.log('requests rows:');
 console.table(db.prepare('SELECT id, client_id, month, submitted, sent_at FROM feedback_requests ORDER BY month').all());

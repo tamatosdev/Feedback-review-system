@@ -8,7 +8,7 @@ const { analyzeFeedback, analyzeCombined, sentimentColor, fallbackAnalysis } = r
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClientAccountManager, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
@@ -386,7 +386,6 @@ function dashboardQueryParams(req) {
     from: String(req.query.from || '').slice(0, 10),
     to: String(req.query.to || '').slice(0, 10),
     client: client || '',
-    accountManager: String(req.query.accountManager || req.query.account_manager || '').trim(),
     status: status || ''
   };
 }
@@ -426,7 +425,7 @@ function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
 
-const BULK_COLUMNS = { name: 'name', email: 'email', companyname: 'company_name', servicetype: 'service_type', status: 'status', accountmanager: 'account_manager' };
+const BULK_COLUMNS = { name: 'name', email: 'email', servicetype: 'service_type', status: 'status' };
 
 function mapClientRow(raw) {
   const mapped = {};
@@ -533,10 +532,8 @@ async function syncClientRows(rows) {
     const { action } = await upsertClientByEmail({
       name: mapped.name,
       email: mapped.email,
-      company_name: mapped.company_name,
       service_type: mapped.service_type,
-      status: (mapped.status || 'active').toLowerCase(),
-      account_manager: mapped.account_manager
+      status: (mapped.status || 'active').toLowerCase()
     });
     if (action === 'inserted') inserted += 1;
     else updated += 1;
@@ -642,9 +639,9 @@ app.post('/api/clients/sync-from-sheet', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, company_name, service_type, status, account_manager } = req.body || {};
+    const { name, email, service_type, status } = req.body || {};
     if (!name || !String(name).trim()) {
-      return res.status(400).json({ ok: false, error: 'Name is required.' });
+      return res.status(400).json({ ok: false, error: 'Client name is required.' });
     }
     if (!email || !CLIENT_EMAIL_RE.test(String(email).trim())) {
       return res.status(400).json({ ok: false, error: 'A valid email is required.' });
@@ -655,10 +652,8 @@ app.post('/api/clients', async (req, res) => {
     const client = await insertClient({
       name,
       email,
-      company_name,
       service_type,
-      status,
-      account_manager
+      status
     });
     res.status(201).json({ ok: true, data: client });
   } catch (err) {
@@ -679,22 +674,14 @@ app.get('/api/clients', async (req, res) => {
 app.patch('/api/clients/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { status, account_manager } = req.body || {};
-    const hasStatus = status !== undefined;
-    const hasAccountManager = account_manager !== undefined;
-    if (!hasStatus && !hasAccountManager) {
-      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status" and/or "account_manager".' });
+    const { status } = req.body || {};
+    if (status === undefined) {
+      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status".' });
     }
-    if (hasStatus && !['active', 'inactive'].includes(status)) {
+    if (!['active', 'inactive'].includes(status)) {
       return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
     }
-    let client = null;
-    if (hasAccountManager) {
-      client = await updateClientAccountManager(id, account_manager);
-    }
-    if (hasStatus) {
-      client = await updateClientStatus(id, status);
-    }
+    const client = await updateClientStatus(id, status);
     if (!client) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });
     }
@@ -921,11 +908,6 @@ function feedbackFormPage(client, request, logoPath) {
     <form id="feedbackForm" class="bg-white border-2 border-brand rounded-3xl shadow-lg p-6 sm:p-8 space-y-5">
       <input type="hidden" name="token" value="${esc(request.token)}" />
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-        <div>
-          <label for="companyName" class="block text-sm font-bold mb-1.5">Company Name <span class="text-gray-400 font-normal">(Optional)</span></label>
-          <input id="companyName" name="companyName" type="text" value="${esc(client.company_name || '')}" placeholder="Enter company name"
-            class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
-        </div>
         <div>
           <label for="attendeeName" class="block text-sm font-bold mb-1.5">Name</label>
           <input id="attendeeName" name="attendeeName" type="text" value="${esc(client.name || '')}" placeholder="Enter your name"

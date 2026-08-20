@@ -53,8 +53,8 @@ async function seed() {
   db.exec('DELETE FROM clients');
   db.exec('DELETE FROM feedback_reports');
 
-  clientA = await insertClient({ name: 'Acme A', email: 'a@acme.com', account_manager: 'Tahir Raza' });
-  clientB = await insertClient({ name: 'Beta B', email: 'b@beta.com', account_manager: 'Jane Doe' });
+  clientA = await insertClient({ name: 'Acme A', email: 'a@acme.com' });
+  clientB = await insertClient({ name: 'Beta B', email: 'b@beta.com' });
 
   await insertFeedback(makeRow({
     submissionId: 'FB-A-JUL', month: '2026-07', timestamp: '2026-07-15T10:00:00.000Z', client_id: clientA.id,
@@ -152,7 +152,7 @@ test('dashboardKpis MoM comparisons are correct', async () => {
   assert.strictEqual(m.departments.creativeScore.change, -0.5, 'creative Jul 3 vs Aug 2.5 = -0.5');
 });
 
-test('dashboardKpis client and account manager filters narrow the data', async () => {
+test('dashboardKpis client filter narrows the data', async () => {
   const byClient = await dashboardKpis({ from: '2026-08-01', to: '2026-08-31', client: String(clientA.id) });
   const agency = byClient.kpis.find((k) => k.key === 'agencyLeadershipScore');
   assert.strictEqual(agency.score, 2, 'client A only: Aug agency score is 2');
@@ -160,10 +160,6 @@ test('dashboardKpis client and account manager filters narrow the data', async (
   assert.strictEqual(byClient.comparisons.clientAverage.score, 2);
   assert.strictEqual(byClient.comparisons.agencyAverage.score, 3, 'agency-wide average for the same period');
   assert.strictEqual(byClient.comparisons.agencyAverage.count, 2, 'legacy row without agency score is not counted');
-
-  const byAm = await dashboardKpis({ from: '2026-08-01', to: '2026-08-31', accountManager: 'Tahir Raza' });
-  assert.strictEqual(byAm.kpis.find((k) => k.key === 'agencyLeadershipScore').score, 2);
-  assert.strictEqual(byAm.kpis.find((k) => k.key === 'agencyLeadershipScore').count, 1);
 });
 
 test('dashboardDepartment Agency Leadership: current, previous, MoM, 3-month, trend', async () => {
@@ -254,11 +250,11 @@ test('no range params: from is open-ended, to defaults to current month', async 
   assert.strictEqual(k.range.fromYm, '0000-01', 'no lower bound when from is absent');
 });
 
-test('dashboardMeta lists departments, clients and account managers', async () => {
+test('dashboardMeta lists departments and clients without account managers', async () => {
   const m = await dashboardMeta();
   assert.strictEqual(m.departments.length, 6);
-  assert.deepStrictEqual(m.accountManagers, ['Jane Doe', 'Tahir Raza']);
-  assert.ok(m.clients.some((c) => c.id === clientA.id && c.account_manager === 'Tahir Raza'));
+  assert.strictEqual(m.accountManagers, undefined, 'account managers must no longer be returned');
+  assert.ok(m.clients.some((c) => c.id === clientA.id && c.name === 'Acme A'));
 });
 
 test('GET /api/dashboard endpoints return aggregates', async () => {

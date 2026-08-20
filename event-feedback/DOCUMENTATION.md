@@ -256,9 +256,9 @@ All clients who receive the monthly form.
 | Column | Type | Notes |
 |---|---|---|
 | `id` | INTEGER PK | Auto-increment |
-| `name` | TEXT | Client name |
+| `name` | TEXT | Client name (the single "Client Name" — this is what the app collects, displays, and pre-fills everywhere) |
 | `email` | TEXT | Client email |
-| `company_name` | TEXT | Optional |
+| `company_name` | TEXT | Legacy column kept in the schema — **unused**; the app no longer reads/writes it |
 | `service_type` | TEXT | Which service they receive (pre-fills the form) |
 | `status` | TEXT | `active` / `inactive` |
 | `created_at` | TEXT | ISO timestamp |
@@ -314,7 +314,7 @@ Receives raw form JSON, then orchestrates the whole pipeline:
 
 - Link format: `https://<domain>/feedback/<token>`.
 - Server validates the token against `feedback_requests` (not already `submitted = 1`).
-- Form is pre-filled from the client's record (name, email, company, service type).
+- Form is pre-filled from the client's record (name, email, service type).
 - On successful submission the matching row is marked `submitted = 1`; the `month` is carried into `feedback_reports` along with `client_id`.
 - Duplicate attempts with the same token are rejected with a friendly message (HTTP 409).
 - Invalid/expired/already-used tokens show a friendly "link invalid or already used" page.
@@ -581,8 +581,8 @@ The same logic is exposed for external schedulers at `POST /api/cron/six-month-r
 
 ### Page behavior
 
-- **Add form:** Name (required), Email (required, validated), Company Name (optional), Service Type, Status dropdown (default `active`). Client-side validation mirrors the server: name non-empty, email matches a simple `^[^\s@]+@[^\s@]+\.[^\s@]+$` check.
-- **Table:** all clients, newest first — Name (+ company), Email, Service Type, Status badge, Created timestamp, and per-row actions.
+- **Add form:** Client Name (required), Email (required, validated), Service Type, Status dropdown (default `active`). Client-side validation mirrors the server: name non-empty, email matches a simple `^[^\s@]+@[^\s@]+\.[^\s@]+$` check.
+- **Table:** all clients, newest first — Client Name, Email, Service Type, Status badge, Created timestamp, and per-row actions.
 - **Toggle:** `PATCH /api/clients/:id` flips the status badge between `active`/`inactive` — client history is never deleted by this action.
 - **Delete:** `DELETE /api/clients/:id` after a `confirm()` prompt.
 - All actions use `fetch` and re-render the table in place — no full page reload; a success/error line appears above the table.
@@ -597,13 +597,12 @@ The page has a **Sync from Google Sheet** card above the add form (no file input
 |---|---|---|
 | `Name` | yes | Skipped with a reason if blank |
 | `Email` | yes | Must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`; duplicates (already in DB **or** earlier in the same sync) are updated/skipped per the behavior below |
-| `Company Name` | no | Blank is fine |
 | `Service Type` | no | Blank is fine |
 | `Status` | no | `active` / `inactive` (case-insensitive); blank defaults to `active`, anything else skips the row with a reason |
 
 **Behavior — UPSERT by email (identical to `POST /api/clients/sync`):**
 
-- Email already in `clients` → the existing row is **updated** (`name`, `company_name`, `service_type`, `status`); no new row.
+- Email already in `clients` → the existing row is **updated** (`name`, `service_type`, `status`); no new row.
 - Email not in `clients` → a new client is **inserted**.
 - Duplicate email **within the same sheet** → later rows skipped (`duplicate email`), first one wins.
 - Rows failing validation (`missing name`, `missing email`, `invalid email format`, bad status) → skipped with `{ row, reason }`; the batch continues.
@@ -637,7 +636,7 @@ Workflow: admin clicks **Open Google Sheet** → edits rows in Google → either
 
 **Behavior — UPSERT by email (identical to sync-from-sheet):**
 
-- Email already in `clients` → the existing row is **updated** (`name`, `company_name`, `service_type`, `status`); no new row.
+- Email already in `clients` → the existing row is **updated** (`name`, `service_type`, `status`); no new row.
 - Email not in `clients` → a new client is **inserted**.
 - Duplicate email **within the same payload** → later rows skipped (`duplicate email`), first one wins.
 - Rows failing validation (`missing name`, `missing email`, `invalid email format`, bad status) → skipped with `{ row, reason }`; the batch continues.
@@ -650,13 +649,13 @@ Setup in the sheet (see the Apps Script code in the "Google Sheets Sync" section
 2. **File → Project properties → Script properties** and add exactly two properties:
    - `APP_URL` — the app's public base URL, e.g. `https://feedback.puredesigners.com` (Apps Script runs on Google's servers — `localhost` won't work; use the deployed domain or a tunnel during development).
    - `SYNC_SECRET` — the exact same random value as `SYNC_SECRET` in the app's `.env` (generate with `node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`).
-3. Reload the sheet — a **Client Sync → Sync Now** menu appears; clicking it POSTs all non-blank data rows (header row skipped, same columns as the upload template: Name, Email, Company Name, Service Type, Status) and shows an alert with `inserted / updated / skipped` counts or a clear error.
+3. Reload the sheet — a **Client Sync → Sync Now** menu appears; clicking it POSTs all non-blank data rows (header row skipped, same columns as the upload template: Name, Email, Service Type, Status) and shows an alert with `inserted / updated / skipped` counts or a clear error.
 
 ### API endpoints
 
 | Method | Path | Body | Behavior |
 |---|---|---|---|
-| `POST` | `/api/clients` | `{ name, email, company_name, service_type, status }` | Validates `name` (required) and `email` (required + valid format) → 400 with a clear message otherwise; `status` defaults to `active` and only accepts `active`/`inactive`. Returns the created row (201). |
+| `POST` | `/api/clients` | `{ name, email, service_type, status }` | Validates `name` (required) and `email` (required + valid format) → 400 with a clear message otherwise; `status` defaults to `active` and only accepts `active`/`inactive`. Returns the created row (201). |
 | `GET` | `/api/clients` | — | All clients, newest first (`ORDER BY id DESC`), including `status`. Returns `{ ok, count, data }`. |
 | `PATCH` | `/api/clients/:id` | `{ status }` | Updates only the status field (`active`/`inactive` else 400); 404 if the client doesn't exist. Returns the updated row. |
 | `DELETE` | `/api/clients/:id` | — | Deletes the client row **and** all their `feedback_requests` rows (tokens become unresolvable — their links show the invalid/expired page). **`feedback_reports` rows are kept** with `client_id` preserved so dashboards and PDF history are never destroyed. 404 if not found. |
