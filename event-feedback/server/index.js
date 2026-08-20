@@ -899,7 +899,7 @@ function feedbackFormPage(client, request, logoPath) {
 <body class="min-h-screen bg-white text-ink antialiased">
   <main id="formView" class="max-w-xl mx-auto px-4 py-10">
     <div class="flex flex-col items-center mb-8">
-      <img src="/assets/logo.png" alt="Logo" class="w-[150px] h-[150px] object-contain drop-shadow-sm" />
+      <img src="/assets/logo.png" alt="Logo" class="w-[170px] h-[60px] object-contain drop-shadow-sm" />
       <h1 class="mt-4 text-2xl font-extrabold tracking-tight">Client Feedback</h1>
       <p class="text-sm text-gray-500 mt-1">We value your feedback and appreciate your time.</p>
       <p class="text-xs text-gray-400 mt-2">${linkNotice}</p>
@@ -1008,7 +1008,7 @@ const linkInvalidPage = `<!DOCTYPE html>
 </head>
 <body class="min-h-screen bg-white text-ink antialiased flex items-center justify-center px-4">
   <main class="max-w-md w-full text-center">
-    <img src="/assets/logo.png" alt="Logo" class="w-24 h-24 object-contain mx-auto mb-6" />
+    <img src="/assets/logo.png" alt="Logo" class="w-[170px] h-[60px] object-contain mx-auto mb-6" />
     <div class="bg-white border-2 border-brand rounded-3xl shadow-lg p-10">
       <div class="mx-auto w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mb-4">
         <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
