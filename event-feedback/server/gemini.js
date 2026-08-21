@@ -31,7 +31,7 @@ const PROMPT_TEMPLATE = (data) => `You are a client feedback analyst. Analyze th
 }
 
 Feedback:
-Project Name / Service Name: ${data.eventName}
+Project Name / Service Name: ${data.serviceType || data.eventName || 'N/A'}
 Overall Rating: ${data.rating}/5
 Department Ratings:
 ${departmentScoresLine(data)}
@@ -131,7 +131,7 @@ async function analyzeCombined(feedbackRows, { apiKey } = {}) {
       const scores = f.agencyLeadershipScore != null
         ? ` | Department Scores: AM ${fmtScore(f.accountManagementScore)}, ST ${fmtScore(f.strategyScore)}, CR ${fmtScore(f.creativeScore)}, DC ${fmtScore(f.designContentScore)}, SC ${fmtScore(f.socialContentScore)}, AL ${fmtScore(f.agencyLeadershipScore)}`
         : '';
-      return `#${i + 1} Project/Service: ${f.eventName} | Overall Rating: ${f.rating}/5${scores} | Client Feedback: ${f.comments}`;
+      return `#${i + 1} Project/Service: ${f.serviceType || f.eventName || 'N/A'} | Overall Rating: ${f.rating}/5${scores} | Client Feedback: ${f.comments}`;
     })
     .join('\n');
 
@@ -158,7 +158,7 @@ ${input}`;
       negative: feedbackRows.filter((f) => f.sentiment === 'Negative').length
     },
     overallSummary: `Combined analysis of ${feedbackRows.length} submissions across the selected date range.`,
-    keyHighlights: feedbackRows.slice(0, 3).map((f) => `${f.eventName}: ${f.comments}`),
+    keyHighlights: feedbackRows.slice(0, 3).map((f) => `${f.serviceType || f.eventName || 'N/A'}: ${f.comments}`),
     topImprovementSuggestions: ['Review recurring feedback themes across events.']
   };
 

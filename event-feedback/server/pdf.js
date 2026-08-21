@@ -2,7 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-const { DEPARTMENT_SCORES, scoreText } = require('./report');
+const { DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, safeText } = require('./report');
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -174,15 +174,15 @@ function drawLabeledLine(doc, label, value) {
 }
 
 function writeFeedbackSection(doc, r, index, fullPage = true) {
-  const service = r.serviceType || r.eventName;
-  const dateVal = r.month || r.eventDate;
+  const service = safeText(serviceNameOf(r));
+  const dateVal = safeText(serviceDateOf(r));
   const title = fullPage ? 'Client Feedback Report' : `#${index} – ${service}`;
-  drawHeader(doc, fullPage ? title : title, fullPage ? `${service}` : `${r.attendeeName} · ${dateVal || 'no date'} · ${r.submissionId}`);
+  drawHeader(doc, fullPage ? title : title, fullPage ? `${service}` : `${r.attendeeName} · ${dateVal} · ${r.submissionId}`);
 
   sectionHeading(doc, 'Project / Service Information');
   infoTable(doc, [
     ['Project Name / Service Name', service],
-    ['Service Date / Project Completion Date', dateVal || 'Not provided'],
+    ['Service Date / Project Completion Date', dateVal],
     ['Overall Rating', `${r.rating} / 5`],
     ['Urgency', r.urgency]
   ]);

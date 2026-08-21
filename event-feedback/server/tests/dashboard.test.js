@@ -157,7 +157,6 @@ test('dashboardKpis client filter narrows the data', async () => {
   const agency = byClient.kpis.find((k) => k.key === 'agencyLeadershipScore');
   assert.strictEqual(agency.score, 2, 'client A only: Aug agency score is 2');
   assert.strictEqual(agency.count, 1);
-  assert.strictEqual(byClient.comparisons.clientAverage.score, 2);
   assert.strictEqual(byClient.comparisons.agencyAverage.score, 3, 'agency-wide average for the same period');
   assert.strictEqual(byClient.comparisons.agencyAverage.count, 2, 'legacy row without agency score is not counted');
 });

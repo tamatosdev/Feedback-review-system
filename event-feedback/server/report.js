@@ -11,6 +11,23 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// The service name / service date were stored as eventName / eventDate in the
+// very first schema, then renamed to serviceType / month. Both the raw form
+// record (used during background processing) and a DB row (used for on-demand
+// /reports regeneration and the dashboard) must render correctly — so read the
+// canonical fields and fall back to the legacy ones. Never return undefined:
+// callers pass these straight into template strings, where `undefined` would
+// render as the literal text "undefined".
+function serviceNameOf(r) {
+  return r ? (r.serviceType ?? r.eventName) : undefined;
+}
+function serviceDateOf(r) {
+  return r ? (r.month ?? r.eventDate) : undefined;
+}
+function safeText(v, fallback = 'N/A') {
+  return (v === undefined || v === null || v === '') ? fallback : v;
+}
+
 function stars(rating) {
   const full = '★'.repeat(Math.max(0, Math.min(5, rating)));
   const empty = '☆'.repeat(5 - full.length);
@@ -65,7 +82,7 @@ function reportHTML(record, logoPath) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Client Feedback Report – ${esc(record.eventName)}</title>
+<title>Client Feedback Report – ${esc(safeText(serviceNameOf(record), 'Client Feedback'))}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -81,8 +98,8 @@ function reportHTML(record, logoPath) {
       <td style="padding:28px 32px">
         <h2 style="color:${ACCENT};text-shadow:0 1px 0 rgba(0,0,0,.25);font-size:18px;margin:24px 0 10px;letter-spacing:.5px">PROJECT / SERVICE INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
-          ${infoRow('Project Name / Service Name', record.eventName)}
-          ${infoRow('Service Date / Project Completion Date', record.eventDate || 'Not provided')}
+          ${infoRow('Project Name / Service Name', safeText(serviceNameOf(record)))}
+          ${infoRow('Service Date / Project Completion Date', safeText(serviceDateOf(record)))}
           ${infoRow('Overall Rating', `${record.rating} / 5`)}
           ${badgeRow(record.sentiment)}
         </table>
@@ -139,8 +156,8 @@ function combinedHTML(meta, rows, logoPath) {
       : '';
     return `
     <tr><td style="padding:22px 0 6px">
-      <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1} – ${esc(r.serviceType || r.eventName)}</h3>
-      <span style="color:#6b7280;font-size:12px">${esc(r.attendeeName)} · ${esc(r.month || r.eventDate)} · ${esc(r.submissionId)}</span>
+      <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1} – ${esc(safeText(serviceNameOf(r)))}</h3>
+      <span style="color:#6b7280;font-size:12px">${esc(r.attendeeName)} · ${esc(safeText(serviceDateOf(r)))} · ${esc(r.submissionId)}</span>
       <div style="margin-top:8px">${stars(r.rating)} &nbsp; ${badge(r.sentiment)}</div>
       ${scoresLine}
     </td></tr>
@@ -195,4 +212,4 @@ function combinedHTML(meta, rows, logoPath) {
 </html>`;
 }
 
-module.exports = { reportHTML, combinedHTML, stars, badge, esc, DEPARTMENT_SCORES, scoreText };
+module.exports = { reportHTML, combinedHTML, stars, badge, esc, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, safeText };

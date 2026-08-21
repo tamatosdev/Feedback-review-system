@@ -307,7 +307,10 @@ test('POST /api/cron/no-response-check endpoint runs the check', async () => {
 
   const { server, base } = await startServer();
   try {
-    const res = await fetch(`${base}/api/cron/no-response-check`, { method: 'POST' });
+    const res = await fetch(`${base}/api/cron/no-response-check`, {
+      method: 'POST',
+      headers: { 'x-cron-secret': process.env.CRON_SECRET || '' }
+    });
     const json = await res.json();
     assert.strictEqual(res.status, 200);
     assert.strictEqual(json.ok, true);

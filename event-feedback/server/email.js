@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { DEPARTMENT_SCORES, scoreText, esc } = require('./report');
+const { DEPARTMENT_SCORES, scoreText, esc, serviceNameOf, safeText } = require('./report');
 
 const BRAND_NAME = 'Craftsmen Media';
 
@@ -22,7 +22,7 @@ function feedbackEmailBody(record, pdfUrl) {
   return [
     `New client feedback received.`,
     ``,
-    `Project Name / Service Name: ${record.eventName}`,
+    `Project Name / Service Name: ${safeText(serviceNameOf(record))}`,
     `Overall Rating: ${record.rating}/5`,
     ``,
     `Department Ratings:`,
@@ -72,7 +72,7 @@ async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl) {
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
     to: config.adminEmail,
-    subject: `New Client Feedback – ${record.eventName} (${record.rating}/5)`,
+    subject: `New Client Feedback – ${safeText(serviceNameOf(record))} (${record.rating}/5)`,
     text: feedbackEmailBody(record, pdfUrl),
     attachments: pdfBuffer
       ? [{ filename: `${record.submissionId}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]
