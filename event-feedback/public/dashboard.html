@@ -390,20 +390,6 @@
       const deptHasData = Object.values(c.month.departments).some((x) => (x.current ?? x.previous) !== null);
       const hasData = overallMoM.current !== null || deptHasData;
 
-      const clientCard = c.clientAverage && state.client
-        ? (() => {
-            const client = meta.clients.find((x) => String(x.id) === String(state.client));
-            const name = client ? client.name : 'Selected client';
-            const diff = c.clientAverage.score !== null && c.agencyAverage.score !== null ? c.clientAverage.score - c.agencyAverage.score : null;
-            return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-4">
-              <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Client vs Agency Average</p>
-              <p class="mt-2 text-sm font-extrabold truncate" title="${esc(name)}">${esc(name)}</p>
-              <p class="mt-1 text-lg font-extrabold">${scoreText(c.clientAverage.score)}</p>
-              <p class="text-xs text-gray-400 font-semibold">Agency-wide: <b class="text-ink">${scoreText(c.agencyAverage.score)}</b> · ${diff === null ? '—' : (diff > 0 ? '+' : '') + diff.toFixed(2)} vs agency</p>
-            </div>`;
-          })()
-        : '';
-
       $('cmpCards').innerHTML = `
         <div class="bg-white border border-gray-100 rounded-2xl shadow-md p-4">
           <p class="text-xs font-bold uppercase tracking-wider text-gray-400">Month vs Previous Month</p>
@@ -412,7 +398,7 @@
             <span class="text-xs text-gray-400 font-semibold">vs ${scoreText(overallMoM.previous, '')}</span>
           </div>
           <p class="text-[11px] text-gray-400 mt-1">Agency Leadership · ${overallMoM.previous} → ${overallMoM.current}</p>
-        </div>` + clientCard;
+        </div>`;
 
       const rows = Object.keys(DEPT_LABELS).map((key) => {
         const m = c.month.departments[key] || {};

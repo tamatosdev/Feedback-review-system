@@ -277,8 +277,7 @@ async function dashboardKpis({ from, to, client } = {}) {
         ),
         departments: monthDepartments
       },
-      agencyAverage: { score: round2(agencyAvg.agencyLeadershipScore), count: agencyAvg.cnt_agency_leadership_score || 0 },
-      clientAverage: hasFilters ? { score: round2(rangeAvg.agencyLeadershipScore), count: rangeAvg.cnt_agency_leadership_score || 0 } : null
+      agencyAverage: { score: round2(agencyAvg.agencyLeadershipScore), count: agencyAvg.cnt_agency_leadership_score || 0 }
     }
   };
 }
