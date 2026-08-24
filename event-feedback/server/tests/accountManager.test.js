@@ -80,7 +80,7 @@ function feedbackMails() {
   return captured.filter((m) => m.subject.startsWith('New Client Feedback'));
 }
 
-test('POST /api/clients + GET stores Account Manager fields; PATCH updates them', async () => {
+test('POST /api/clients + GET stores Account Manager Email; PATCH updates it', async () => {
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
   try {
@@ -90,17 +90,14 @@ test('POST /api/clients + GET stores Account Manager fields; PATCH updates them'
       body: JSON.stringify({
         name: 'AM Client',
         email: 'am@client.com',
-        accountManager: 'Jane Doe',
         accountManagerEmail: 'jane@agency.com'
       })
     })).json();
     assert.strictEqual(created.ok, true);
-    assert.strictEqual(created.data.accountManager, 'Jane Doe');
     assert.strictEqual(created.data.accountManagerEmail, 'jane@agency.com');
 
     const list = await (await fetch(`${base}/api/clients`)).json();
     const row = list.data.find((c) => c.email === 'am@client.com');
-    assert.strictEqual(row.accountManager, 'Jane Doe');
     assert.strictEqual(row.accountManagerEmail, 'jane@agency.com');
 
     const patched = await (await fetch(`${base}/api/clients/${created.data.id}`, {
@@ -109,7 +106,6 @@ test('POST /api/clients + GET stores Account Manager fields; PATCH updates them'
       body: JSON.stringify({ accountManagerEmail: 'jane.new@agency.com' })
     })).json();
     assert.strictEqual(patched.data.accountManagerEmail, 'jane.new@agency.com');
-    assert.strictEqual(patched.data.accountManager, 'Jane Doe', 'untouched field preserved');
 
     const bad = await fetch(`${base}/api/clients/${created.data.id}`, {
       method: 'PATCH',
@@ -130,7 +126,7 @@ test('POST /api/clients/sync (push) maps AM columns and skips invalid manager em
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Sync-Secret': 'test-secret' },
       body: JSON.stringify({ clients: [
-        { Name: 'Good AM', Email: 'good@sync.com', 'Service Type': 'Retainer', 'Account Manager Name': 'Sam', 'Account Manager Email': 'sam@agency.com' },
+        { Name: 'Good AM', Email: 'good@sync.com', 'Service Type': 'Retainer', 'Account Manager Email': 'sam@agency.com' },
         { Name: 'Bad AM', Email: 'bad@sync.com', 'Account Manager Email': 'garbage' }
       ] })
     });
@@ -141,7 +137,6 @@ test('POST /api/clients/sync (push) maps AM columns and skips invalid manager em
     assert.strictEqual(json.skipped[0].reason, 'invalid account manager email format');
 
     const good = db.prepare('SELECT * FROM clients WHERE email = ?').get('good@sync.com');
-    assert.strictEqual(good.account_manager, 'Sam');
     assert.strictEqual(good.account_manager_email, 'sam@agency.com');
 
     const updated = await (await fetch(`${base}/api/clients/sync`, {
@@ -168,8 +163,8 @@ test('sync-from-sheet (pull) maps AM columns from CSV and skips bad manager emai
     assert.strictEqual(json.skipped[0].reason, 'invalid account manager email format');
 
     const row = db.prepare('SELECT * FROM clients WHERE email = ?').get('csv@sync.com');
-    assert.strictEqual(row.account_manager, 'Bob');
     assert.strictEqual(row.account_manager_email, 'bob@agency.com');
+    assert.strictEqual(row.account_manager, null, 'legacy name column is never written by the app');
   } finally {
     stopServer(server);
   }
@@ -227,14 +222,13 @@ test('feedback notification goes only to admin when no Account Manager email', a
   }
 });
 
-test('upsertClientByEmail preserves existing AM fields when omitted and overwrites when provided', async () => {
-  const first = await upsertClientByEmail({ name: 'Upsert AM', email: 'ups@am.com', accountManager: 'Kim', accountManagerEmail: 'kim@am.com' });
+test('upsertClientByEmail preserves existing AM email when omitted and overwrites when provided', async () => {
+  const first = await upsertClientByEmail({ name: 'Upsert AM', email: 'ups@am.com', accountManagerEmail: 'kim@am.com' });
   assert.strictEqual(first.action, 'inserted');
   assert.strictEqual(first.row.accountManagerEmail, 'kim@am.com');
 
   const second = await upsertClientByEmail({ name: 'Upsert AM Renamed', email: 'ups@am.com' });
   assert.strictEqual(second.action, 'updated');
-  assert.strictEqual(second.row.accountManager, 'Kim', 'existing AM name preserved when omitted');
   assert.strictEqual(second.row.accountManagerEmail, 'kim@am.com', 'existing AM email preserved when omitted');
 
   const third = await upsertClientByEmail({ name: 'Upsert AM Renamed', email: 'ups@am.com', accountManagerEmail: 'new@am.com' });

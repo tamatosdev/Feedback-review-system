@@ -47,7 +47,6 @@ const COLUMN_ALIASES = {
   design_content_score: 'designContentScore',
   social_content_score: 'socialContentScore',
   agency_leadership_score: 'agencyLeadershipScore',
-  account_manager: 'accountManager',
   account_manager_email: 'accountManagerEmail'
 };
 
@@ -501,17 +500,16 @@ async function stats({ from, to } = {}) {
 
 // ---------- Clients ----------
 
-async function insertClient({ name, email, service_type = '', status = 'active', accountManager = '', accountManagerEmail = '' }) {
+async function insertClient({ name, email, service_type = '', status = 'active', accountManagerEmail = '' }) {
   return runReturning(`
-    INSERT INTO clients (name, email, service_type, status, account_manager, account_manager_email, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO clients (name, email, service_type, status, account_manager_email, created_at)
+    VALUES (?, ?, ?, ?, ?, ?)
     RETURNING *
   `, [
     String(name || '').trim(),
     String(email || '').trim(),
     String(service_type || '').trim(),
     status === 'inactive' ? 'inactive' : 'active',
-    String(accountManager || '').trim(),
     String(accountManagerEmail || '').trim(),
     new Date().toISOString()
   ]);
@@ -547,7 +545,6 @@ async function updateClient(id, fields) {
     email: 'email',
     service_type: 'service_type',
     status: 'status',
-    accountManager: 'account_manager',
     accountManagerEmail: 'account_manager_email'
   };
   const sets = [];
@@ -563,18 +560,17 @@ async function updateClient(id, fields) {
   return row || null;
 }
 
-async function upsertClientByEmail({ name, email, service_type = '', status = 'active', accountManager, accountManagerEmail }) {
+async function upsertClientByEmail({ name, email, service_type = '', status = 'active', accountManagerEmail }) {
   const existing = await getRow('SELECT * FROM clients WHERE lower(email) = lower(?)', [email]);
   if (existing) {
-    const am = accountManager !== undefined ? String(accountManager || '').trim() : (existing.accountManager || '');
     const ame = accountManagerEmail !== undefined ? String(accountManagerEmail || '').trim() : (existing.accountManagerEmail || '');
     const row = await runReturning(
-      'UPDATE clients SET name = ?, service_type = ?, status = ?, account_manager = ?, account_manager_email = ? WHERE id = ? RETURNING *',
-      [name, service_type, status, am, ame, existing.id]
+      'UPDATE clients SET name = ?, service_type = ?, status = ?, account_manager_email = ? WHERE id = ? RETURNING *',
+      [name, service_type, status, ame, existing.id]
     );
     return { action: 'updated', row };
   }
-  return { action: 'inserted', row: await insertClient({ name, email, service_type, status, accountManager, accountManagerEmail }) };
+  return { action: 'inserted', row: await insertClient({ name, email, service_type, status, accountManagerEmail }) };
 }
 
 async function deleteClient(id) {

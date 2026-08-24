@@ -10,7 +10,6 @@ const MARGIN = 48;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
 const ACCENT = '#FFF000';
-const HEADING = '#4ade80';
 const BLACK = '#111827';
 const GRAY = '#6b7280';
 const ROW_BG = '#f9fafb';
@@ -89,7 +88,7 @@ function drawPlaceholderLogo(doc, x, y, size) {
 function sectionHeading(doc, text) {
   ensureSpace(doc, 40);
   doc.moveDown(0.9);
-  doc.fillColor(HEADING).font(doc.interFonts.bold).fontSize(12.5).text(text.toUpperCase(), { characterSpacing: 0.8 });
+  doc.fillColor(BLACK).font(doc.interFonts.bold).fontSize(12.5).text(text.toUpperCase(), { characterSpacing: 0.8 });
   doc.moveDown(0.4);
 }
 
@@ -159,7 +158,8 @@ function drawBullets(doc, items, label) {
   doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5);
   for (const item of items) {
     ensureSpace(doc, 30);
-    doc.circle(MARGIN + 5, doc.y + 4.5, 2.2).fill(HEADING);
+    doc.circle(MARGIN + 5, doc.y + 4.5, 2.2).fill(BLACK);
+    doc.fillColor(BLACK).font(doc.interFonts.regular).fontSize(9.5);
     doc.text(String(item), MARGIN + 16, doc.y, { width: CONTENT_W - 16 });
     doc.moveDown(0.25);
   }

@@ -431,7 +431,7 @@ function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
 
-const BULK_COLUMNS = { name: 'name', email: 'email', servicetype: 'service_type', status: 'status', accountmanagername: 'accountManager', accountmanageremail: 'accountManagerEmail' };
+const BULK_COLUMNS = { name: 'name', email: 'email', servicetype: 'service_type', status: 'status', accountmanageremail: 'accountManagerEmail' };
 
 function mapClientRow(raw) {
   const mapped = {};
@@ -544,7 +544,6 @@ async function syncClientRows(rows) {
       email: mapped.email,
       service_type: mapped.service_type,
       status: (mapped.status || 'active').toLowerCase(),
-      accountManager: mapped.accountManager,
       accountManagerEmail: mapped.accountManagerEmail
     });
     if (action === 'inserted') inserted += 1;
@@ -651,7 +650,7 @@ app.post('/api/clients/sync-from-sheet', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, service_type, status, accountManager, accountManagerEmail } = req.body || {};
+    const { name, email, service_type, status, accountManagerEmail } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ ok: false, error: 'Client name is required.' });
     }
@@ -670,7 +669,6 @@ app.post('/api/clients', async (req, res) => {
       email,
       service_type,
       status,
-      accountManager: accountManager ? String(accountManager).trim() : '',
       accountManagerEmail: amEmail
     });
     res.status(201).json({ ok: true, data: client });
@@ -700,9 +698,6 @@ app.patch('/api/clients/:id', async (req, res) => {
       }
       fields.status = body.status;
     }
-    if (body.accountManager !== undefined) {
-      fields.accountManager = String(body.accountManager).trim();
-    }
     if (body.accountManagerEmail !== undefined) {
       const amEmail = String(body.accountManagerEmail).trim();
       if (amEmail && !CLIENT_EMAIL_RE.test(amEmail)) {
@@ -711,7 +706,7 @@ app.patch('/api/clients/:id', async (req, res) => {
       fields.accountManagerEmail = amEmail;
     }
     if (Object.keys(fields).length === 0) {
-      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status", "accountManager", and/or "accountManagerEmail".' });
+      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status" and/or "accountManagerEmail".' });
     }
     const client = await updateClient(id, fields);
     if (!client) {
