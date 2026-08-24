@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email label preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>tailwind.config = { theme: { extend: { colors: { brand: '#FFF000', brandDark: '#CCBF00', ink: '#111827' } } } };</script>
+  <style>body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }</style>
+</head>
+<body class="min-h-screen bg-gray-50 text-ink antialiased">
+  <div class="preview-banner text-center text-xs font-bold py-2" style="background:#FFF000;color:#111827">PREVIEW ONLY — shows the updated "Email" → "Email Address" labels</div>
+
+  <main class="mx-auto max-w-2xl px-4 py-10 space-y-10">
+
+    <!-- ===== Client-facing feedback form (server/index.js + public/index.html) ===== -->
+    <section class="rounded-2xl border border-gray-200 bg-white p-6">
+      <h2 class="text-lg font-extrabold mb-4">Client Feedback Form — Respondent fields</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="attendeeName" class="block text-sm font-bold mb-1.5">Name</label>
+          <input id="attendeeName" name="attendeeName" type="text" placeholder="Enter your name"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="attendeeEmail" class="block text-sm font-bold mb-1.5">Email Address</label>
+          <input id="attendeeEmail" name="attendeeEmail" type="email" placeholder="Enter your email"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Admin panel: Add New Client form ===== -->
+    <section class="rounded-2xl border border-gray-200 bg-white p-6">
+      <h2 class="text-lg font-extrabold mb-4">Admin — Add New Client</h2>
+      <div class="space-y-4">
+        <div>
+          <label for="name" class="block text-xs font-bold mb-1">Client Name</label>
+          <input id="name" name="name" type="text" placeholder="Client Name"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="email" class="block text-xs font-bold mb-1">Email Address *</label>
+          <input id="email" name="email" type="email" required placeholder="client@example.com"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="accountManagerEmail" class="block text-xs font-bold mb-1">Account Manager Email</label>
+          <input id="accountManagerEmail" name="accountManagerEmail" type="email" placeholder="jane@agency.com"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Admin panel: clients table header ===== -->
+    <section class="rounded-2xl border border-gray-200 bg-white p-6">
+      <h2 class="text-lg font-extrabold mb-4">Admin — Clients table header</h2>
+      <table class="w-full text-left text-sm">
+        <thead class="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+          <tr>
+            <th class="px-5 py-3 font-bold">Client Name</th>
+            <th class="px-5 py-3 font-bold">Email Address</th>
+            <th class="px-5 py-3 font-bold">AM Email</th>
+            <th class="px-5 py-3 font-bold">Status</th>
+          </tr>
+        </thead>
+      </table>
+    </section>
+
+  </main>
+</body>
+</html>

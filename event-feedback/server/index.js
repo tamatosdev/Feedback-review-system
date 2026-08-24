@@ -937,7 +937,7 @@ function feedbackFormPage(client, request, logoPath) {
             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
         </div>
         <div>
-          <label for="attendeeEmail" class="block text-sm font-bold mb-1.5">Email</label>
+          <label for="attendeeEmail" class="block text-sm font-bold mb-1.5">Email Address</label>
           <input id="attendeeEmail" name="attendeeEmail" type="email" value="${esc(client.email || '')}" placeholder="Enter your email"
             class="w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-brand focus:border-brand" />
         </div>

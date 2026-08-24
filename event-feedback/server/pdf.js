@@ -194,7 +194,7 @@ function writeFeedbackSection(doc, r, index, fullPage = true) {
   sectionHeading(doc, 'Client Information');
   infoTable(doc, [
     ['Name', r.attendeeName],
-    ['Email', r.attendeeEmail && r.hasValidEmail !== false ? r.attendeeEmail : 'Not provided'],
+    ['Email Address', r.attendeeEmail && r.hasValidEmail !== false ? r.attendeeEmail : 'Not provided'],
     ['Company', r.companyName || 'Not provided']
   ]);
 
