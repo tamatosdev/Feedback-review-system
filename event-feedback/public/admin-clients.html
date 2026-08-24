@@ -69,11 +69,6 @@
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
-          <label for="serviceType" class="block text-xs font-bold mb-1">Service Type</label>
-          <input id="serviceType" name="serviceType" type="text" placeholder="e.g. Branding Package"
-            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div>
           <label for="accountManagerEmail" class="block text-xs font-bold mb-1">Account Manager Email</label>
           <input id="accountManagerEmail" name="accountManagerEmail" type="email" placeholder="jane@agency.com"
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
@@ -106,7 +101,6 @@
             <tr>
               <th class="px-5 py-3 font-bold">Client Name</th>
               <th class="px-5 py-3 font-bold">Email</th>
-              <th class="px-5 py-3 font-bold">Service Type</th>
               <th class="px-5 py-3 font-bold">AM Email</th>
               <th class="px-5 py-3 font-bold">Status</th>
               <th class="px-5 py-3 font-bold">Created</th>
@@ -159,7 +153,6 @@
         <tr class="hover:bg-gray-50/60 transition">
           <td class="px-5 py-4"><input data-edit="name" value="${esc(c.name)}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
           <td class="px-5 py-4"><input data-edit="email" value="${esc(c.email)}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
-          <td class="px-5 py-4"><input data-edit="service_type" value="${esc(c.service_type || '')}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
           <td class="px-5 py-4"><input data-edit="accountManagerEmail" value="${esc(c.accountManagerEmail || '')}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
           <td class="px-5 py-4">
             <select data-edit="status" class="rounded-lg border border-gray-200 px-2 py-1 text-sm">
@@ -178,7 +171,6 @@
         <tr class="hover:bg-gray-50/60 transition">
           <td class="px-5 py-4 font-bold">${esc(c.name)}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.email)}</td>
-          <td class="px-5 py-4 text-gray-600">${esc(c.service_type || '—')}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.accountManagerEmail || '—')}</td>
           <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${statusClasses[c.status] || 'bg-gray-100 text-gray-600'}">${esc(c.status)}</span></td>
           <td class="px-5 py-4 text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</td>
@@ -358,7 +350,6 @@
       addClient({
         name,
         email,
-        service_type: $('serviceType').value.trim(),
         status: $('status').value,
         accountManagerEmail: $('accountManagerEmail').value.trim()
       });

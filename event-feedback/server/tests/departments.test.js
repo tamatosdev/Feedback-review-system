@@ -63,7 +63,7 @@ test.before(async () => {
   // so the pull sync endpoint can be exercised end-to-end.
   csvServer = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'text/csv');
-    res.end('Name,Email,Service Type,Status\nSheet Co,sheetentry@test.com,Retainer,active\n');
+    res.end('Name,Email,Status\nSheet Co,sheetentry@test.com,active\n');
   });
   await new Promise((resolve) => csvServer.listen(0, resolve));
   process.env.SHEET_CSV_URL = `http://127.0.0.1:${csvServer.address().port}/clients.csv`;
@@ -262,7 +262,7 @@ test('POST /api/clients/sync upserts rows with just Name/Email columns (no Compa
     const res = await fetch(`${base}/api/clients/sync`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Sync-Secret': 'test-secret' },
-      body: JSON.stringify({ clients: [{ Name: 'Sync Only', Email: 'only@sync.com', 'Service Type': 'Retainer', Status: 'active' }] })
+      body: JSON.stringify({ clients: [{ Name: 'Sync Only', Email: 'only@sync.com', Status: 'active' }] })
     });
     assert.strictEqual(res.status, 200);
     const json = await res.json();
@@ -273,7 +273,7 @@ test('POST /api/clients/sync upserts rows with just Name/Email columns (no Compa
 
     const fromDb = db.prepare('SELECT * FROM clients WHERE email = ?').get('only@sync.com');
     assert.strictEqual(fromDb.name, 'Sync Only');
-    assert.strictEqual(fromDb.service_type, 'Retainer');
+    assert.strictEqual(fromDb.service_type, null, 'service_type is no longer written by sync');
     assert.strictEqual(fromDb.company_name, null, 'company_name column stays untouched');
 
     const second = await fetch(`${base}/api/clients/sync`, {
@@ -306,7 +306,7 @@ test('POST /api/clients/sync-from-sheet pulls a CSV with only a Name column', as
     const stored = (await db.prepare('SELECT * FROM clients WHERE email = ?').get('sheetentry@test.com'));
     assert.ok(stored, 'row from CSV stored');
     assert.strictEqual(stored.name, 'Sheet Co');
-    assert.strictEqual(stored.service_type, 'Retainer');
+    assert.strictEqual(stored.service_type, null, 'service_type is no longer written by sheet sync');
     assert.strictEqual(stored.company_name, null, 'company_name stays null without a Company Name column');
   } finally {
     if (server.closeAllConnections) server.closeAllConnections();

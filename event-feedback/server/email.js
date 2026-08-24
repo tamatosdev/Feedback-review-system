@@ -103,7 +103,7 @@ function clientFeedbackRequestBody(client, link) {
   return [
     `Hi ${client.name},`,
     ``,
-    `Thank you for working with us. We'd love to hear how things went with ${client.service_type || 'our service'} so we can keep improving.`,
+    `Thank you for working with us. We'd love to hear your feedback so we can keep improving.`,
     ``,
     `Please take a minute to complete our short feedback form:`,
     link,
@@ -160,7 +160,6 @@ function lowScoreAlertContent({ client, score, month, threshold, dashboardUrl })
     `Client: ${client.name} (${client.email || 'no email'})`,
     `Overall rating (Agency Leadership): ${score}/5 — below the ${threshold} threshold.`,
     `Month: ${month}`,
-    `Service: ${client.service_type || 'General'}`,
     ``,
     `Dashboard: ${dashboardUrl}`
   ]) };
@@ -200,13 +199,13 @@ function escalationAlertContent({ client, score, month, streak, months, threshol
   ]) };
 }
 
-function noResponseClientReminderContent({ name, service_type }, month, days, link) {
+function noResponseClientReminderContent({ name }, month, days, link) {
   const company = name || 'your service';
   const subject = `Reminder: Monthly feedback for ${company} (${month})`;
   return { subject, ...wrapAlertContent(subject, [
     `Hi ${name},`,
     ``,
-    `We sent you a short feedback form for ${service_type || 'our service'} ${days} day${days === 1 ? '' : 's'} ago and haven't heard back yet — your answers help us keep improving.`,
+    `We sent you a short feedback form ${days} day${days === 1 ? '' : 's'} ago and haven't heard back yet — your answers help us keep improving.`,
     ``,
     `It only takes about a minute:`,
     link,

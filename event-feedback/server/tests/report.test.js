@@ -147,8 +147,8 @@ test('combinedHTML shows serviceType from DB rows (no literal "undefined")', asy
   assert.ok(!html.includes('undefined'), 'combined must never render literal "undefined"');
 });
 
-test('on-demand report for a tokenized submission shows client service_type and request month', async () => {
-  const client = await insertClient({ name: 'Report Co', email: 'report@co.com', service_type: 'Branding Package' });
+test('on-demand report for a tokenized submission shows the "General" fallback service and request month', async () => {
+  const client = await insertClient({ name: 'Report Co', email: 'report@co.com' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
 
@@ -168,7 +168,7 @@ test('on-demand report for a tokenized submission shows client service_type and 
     const repRes = await fetch(`${base}/reports/${json.submissionId}.html`);
     assert.strictEqual(repRes.status, 200);
     const repHtml = await repRes.text();
-    assert.ok(repHtml.includes('Branding Package'), 'service name should come from the linked client record');
+    assert.ok(repHtml.includes('General'), 'tokenized submissions fall back to "General" without a client Service Type');
     assert.ok(repHtml.includes('2026-09'), 'service date should come from the feedback request month');
     assert.ok(!repHtml.includes('undefined'), 'must never render literal "undefined"');
   } finally {

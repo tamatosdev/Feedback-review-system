@@ -172,7 +172,7 @@ test('sync-from-sheet (pull) maps AM columns from CSV and skips bad manager emai
 
 test('feedback notification copies the Account Manager when set', async () => {
   captured.length = 0;
-  const client = await insertClient({ name: 'AM Feedback', email: 'amfb@client.com', service_type: 'Branding', accountManager: 'Jane', accountManagerEmail: 'jane@am.test' });
+  const client = await insertClient({ name: 'AM Feedback', email: 'amfb@client.com', accountManagerEmail: 'jane@am.test' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-06', token });
 
@@ -199,7 +199,7 @@ test('feedback notification copies the Account Manager when set', async () => {
 
 test('feedback notification goes only to admin when no Account Manager email', async () => {
   captured.length = 0;
-  const client = await insertClient({ name: 'No AM', email: 'noam@client.com', service_type: 'Branding' });
+  const client = await insertClient({ name: 'No AM', email: 'noam@client.com' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-06', token });
 

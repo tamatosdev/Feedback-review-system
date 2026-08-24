@@ -259,7 +259,7 @@ All clients who receive the monthly form.
 | `name` | TEXT | Client name (the single "Client Name" — this is what the app collects, displays, and pre-fills everywhere) |
 | `email` | TEXT | Client email |
 | `company_name` | TEXT | Legacy column kept in the schema — **unused**; the app no longer reads/writes it |
-| `service_type` | TEXT | Which service they receive (pre-fills the form) |
+| `service_type` | TEXT | Legacy column kept in the schema — **unused**; the app no longer reads/writes it (the "Service Type" client field was removed) |
 | `status` | TEXT | `active` / `inactive` |
 | `account_manager_email` | TEXT | **Account Manager Email** — receives a copy of this client's feedback notification. Optional, nullable, and validated against the same `^[^\s@]+@[^\s@]+\.[^\s@]+$` rule as the client email (invalid values are rejected by the API and skipped during Sheets sync). |
 | `created_at` | TEXT | ISO timestamp |
@@ -585,8 +585,8 @@ The same logic is exposed for external schedulers at `POST /api/cron/six-month-r
 
 ### Page behavior
 
-- **Add form:** Client Name (required), Email (required, validated), Service Type, Status dropdown (default `active`), and **Account Manager Email** (optional; validated against `^[^\s@]+@[^\s@]+\.[^\s@]+$`). Client-side validation mirrors the server.
-- **Table:** all clients, newest first — Client Name, Email, Service Type, Account Manager Email, Status badge, Created timestamp, and per-row actions. Each row is **inline-editable** (Edit button) so an assigned Account Manager Email can be added/changed after the fact.
+- **Add form:** Client Name (required), Email (required, validated), Status dropdown (default `active`), and **Account Manager Email** (optional; validated against `^[^\s@]+@[^\s@]+\.[^\s@]+$`). Client-side validation mirrors the server.
+- **Table:** all clients, newest first — Client Name, Email, Account Manager Email, Status badge, Created timestamp, and per-row actions. Each row is **inline-editable** (Edit button) so an assigned Account Manager Email can be added/changed after the fact.
 - **Toggle:** `PATCH /api/clients/:id` flips the status badge between `active`/`inactive` — client history is never deleted by this action.
 - **Delete:** `DELETE /api/clients/:id` after a `confirm()` prompt.
 - All actions use `fetch` and re-render the table in place — no full page reload; a success/error line appears above the table.
@@ -601,14 +601,13 @@ The page has a **Sync from Google Sheet** card above the add form (no file input
 |---|---|---|
 | `Name` | yes | Skipped with a reason if blank |
 | `Email` | yes | Must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`; duplicates (already in DB **or** earlier in the same sync) are updated/skipped per the behavior below |
-| `Service Type` | no | Blank is fine |
 | `Status` | no | `active` / `inactive` (case-insensitive); blank defaults to `active`, anything else skips the row with a reason |
 | `Account Manager Email` | no | Optional; when present must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`, otherwise the row is skipped with reason `invalid account manager email format` (the rest of the row is still validated first) |
 
 **Behavior — UPSERT by email (identical to `POST /api/clients/sync`):**
 
   - Email already in clients ? the existing row is **updated** (
-ame, service_type, status, and ccount_manager_email when that column is present in the row); no new row.
+ame, status, and ccount_manager_email when that column is present in the row); no new row.
 - Email not in `clients` → a new client is **inserted**.
 - Duplicate email **within the same sheet** → later rows skipped (`duplicate email`), first one wins.
 - Rows failing validation (`missing name`, `missing email`, `invalid email format`, `invalid account manager email format`, bad status) → skipped with `{ row, reason }`; the batch continues.
@@ -643,7 +642,7 @@ Workflow: admin clicks **Open Google Sheet** → edits rows in Google → either
 **Behavior — UPSERT by email (identical to sync-from-sheet):**
 
   - Email already in clients ? the existing row is **updated** (
-ame, service_type, status, and ccount_manager_email when that column is present in the row); no new row.
+ame, status, and ccount_manager_email when that column is present in the row); no new row.
 - Email not in `clients` → a new client is **inserted**.
 - Duplicate email **within the same payload** → later rows skipped (`duplicate email`), first one wins.
 - Rows failing validation (`missing name`, `missing email`, `invalid email format`, `invalid account manager email format`, bad status) → skipped with `{ row, reason }`; the batch continues.
@@ -656,13 +655,13 @@ Setup in the sheet (see the Apps Script code in the "Google Sheets Sync" section
 2. **File → Project properties → Script properties** and add exactly two properties:
    - `APP_URL` — the app's public base URL, e.g. `https://feedback.puredesigners.com` (Apps Script runs on Google's servers — `localhost` won't work; use the deployed domain or a tunnel during development).
    - `SYNC_SECRET` — the exact same random value as `SYNC_SECRET` in the app's `.env` (generate with `node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"`).
-3. Reload the sheet — a **Client Sync → Sync Now** menu appears; clicking it POSTs all non-blank data rows (header row skipped, same columns as the upload template: Name, Email, Service Type, Status, Account Manager Email) and shows an alert with `inserted / updated / skipped` counts or a clear error.
+3. Reload the sheet — a **Client Sync → Sync Now** menu appears; clicking it POSTs all non-blank data rows (header row skipped, same columns as the upload template: Name, Email, Status, Account Manager Email) and shows an alert with `inserted / updated / skipped` counts or a clear error.
 
 ### API endpoints
 
 | Method | Path | Body | Behavior |
 |---|---|---|---|
-| `POST` | `/api/clients` | `{ name, email, service_type, status, accountManagerEmail }` | Validates `name` (required) and `email` (required + valid format) → 400 with a clear message otherwise; `status` defaults to `active` and only accepts `active`/`inactive`. `accountManagerEmail` is optional; if present it must be a valid email (else 400). Returns the created row (201). |
+| `POST` | `/api/clients` | `{ name, email, status, accountManagerEmail }` | Validates `name` (required) and `email` (required + valid format) → 400 with a clear message otherwise; `status` defaults to `active` and only accepts `active`/`inactive`. `accountManagerEmail` is optional; if present it must be a valid email (else 400). Returns the created row (201). |
 | `GET` | `/api/clients` | — | All clients, newest first (`ORDER BY id DESC`), including `status` and `accountManagerEmail`. Returns `{ ok, count, data }`. |
 | `PATCH` | `/api/clients/:id` | `{ status?, accountManagerEmail? }` | Updates whichever of `status` / `accountManagerEmail` are provided (400 if none). `accountManagerEmail` must be a valid email when present (else 400); `status` only accepts `active`/`inactive`. 404 if the client doesn't exist. Returns the updated row. |
 | `DELETE` | `/api/clients/:id` | — | Deletes the client row **and** all their `feedback_requests` rows (tokens become unresolvable — their links show the invalid/expired page). **`feedback_reports` rows are kept** with `client_id` preserved so dashboards and PDF history are never destroyed. 404 if not found. |
@@ -671,9 +670,9 @@ Setup in the sheet (see the Apps Script code in the "Google Sheets Sync" section
 
 - `listClients()` — all clients, newest first
 - `updateClientStatus(id, status)` — status-only update; returns the updated row or `null`
-- `updateClient(id, fields)` — generic client update; only the provided keys (`name`, `email`, `service_type`, `status`, `accountManagerEmail`) are written; returns the updated row or `null`
-- `insertClient({ name, email, service_type, status, accountManagerEmail })` — inserts a client with the optional Account Manager Email
-- `upsertClientByEmail({ name, email, service_type, status, accountManagerEmail })` — upserts by email; updates `account_manager_email` when that key is present in the call (existing value preserved when omitted)
+- `updateClient(id, fields)` — generic client update; only the provided keys (`name`, `email`, `status`, `accountManagerEmail`) are written; returns the updated row or `null`
+- `insertClient({ name, email, status, accountManagerEmail })` — inserts a client with the optional Account Manager Email
+- `upsertClientByEmail({ name, email, status, accountManagerEmail })` — upserts by email; updates `account_manager_email` when that key is present in the call (existing value preserved when omitted)
 - `deleteClient(id)` — removes `feedback_requests` for the client, then the client row; returns `{ deleted, removedRequests }`
 
 ### Security note (important)

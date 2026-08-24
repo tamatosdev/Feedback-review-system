@@ -112,7 +112,7 @@ async function postFeedback(base, token, overrides) {
 
 test('low score submission fires one leadership alert; dedup blocks repeats', async () => {
   captured.length = 0;
-  const client = await insertClient({ name: 'Low Client', email: 'low@alerts.test', service_type: 'Branding' });
+  const client = await insertClient({ name: 'Low Client', email: 'low@alerts.test' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-06', token });
 

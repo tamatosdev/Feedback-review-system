@@ -43,7 +43,7 @@ function submitBody(overrides = {}) {
 }
 
 test('tokenized form page has no service/project input, no eventName field, and no company name field', async () => {
-  const client = await insertClient({ name: 'Form Client', email: 'form@client.com', service_type: 'Branding Package' });
+  const client = await insertClient({ name: 'Form Client', email: 'form@client.com' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
 
@@ -67,8 +67,8 @@ test('tokenized form page has no service/project input, no eventName field, and 
   }
 });
 
-test('tokenized submission stores the client service_type server-side (no service field submitted)', async () => {
-  const client = await insertClient({ name: 'Auto Service Co', email: 'auto@co.com', service_type: 'Website Revamp' });
+test('tokenized submission does not copy a client service name (falls back to "General")', async () => {
+  const client = await insertClient({ name: 'Auto Service Co', email: 'auto@co.com' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
 
@@ -83,13 +83,13 @@ test('tokenized submission stores the client service_type server-side (no servic
     assert.strictEqual(res.status, 201);
     const json = await res.json();
     assert.strictEqual(json.ok, true);
-    assert.strictEqual(json.serviceType, 'Website Revamp', 'service comes from the client record');
+    assert.strictEqual(json.serviceType, 'General', 'tokenized submissions fall back to "General" (no client Service Type field)');
     assert.strictEqual(json.month, '2026-09', 'month comes from the feedback request');
 
     const rows = await queryFeedback();
     const row = rows.find((r) => r.submissionId === json.submissionId);
     assert.ok(row, 'submission stored');
-    assert.strictEqual(row.serviceType, 'Website Revamp');
+    assert.strictEqual(row.serviceType, 'General');
     assert.strictEqual(row.month, '2026-09');
     assert.strictEqual(row.client_id, client.id);
   } finally {
@@ -99,7 +99,7 @@ test('tokenized submission stores the client service_type server-side (no servic
 });
 
 test('tokenized submission ignores a tampered/typed eventName from the client', async () => {
-  const client = await insertClient({ name: 'Tamper Co', email: 'tamper@co.com', service_type: 'Social Retainer' });
+  const client = await insertClient({ name: 'Tamper Co', email: 'tamper@co.com' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
 
@@ -113,18 +113,18 @@ test('tokenized submission ignores a tampered/typed eventName from the client', 
     });
     const json = await res.json();
     assert.strictEqual(json.ok, true);
-    assert.strictEqual(json.serviceType, 'Social Retainer', 'client-submitted eventName must never override the client record');
+    assert.strictEqual(json.serviceType, 'General', 'client-submitted eventName must never override and no client service is copied');
 
     const row = (await queryFeedback()).find((r) => r.submissionId === json.submissionId);
-    assert.strictEqual(row.serviceType, 'Social Retainer');
+    assert.strictEqual(row.serviceType, 'General');
   } finally {
     if (server.closeAllConnections) server.closeAllConnections();
     server.close();
   }
 });
 
-test('tokenized submission with blank client service_type falls back to "General" and logs a warning', async () => {
-  const client = await insertClient({ name: 'No Service Co', email: 'noservice@co.com', service_type: '' });
+test('tokenized submission falls back to "General" (no client Service Type field) and logs no warning', async () => {
+  const client = await insertClient({ name: 'No Service Co', email: 'noservice@co.com' });
   const token = crypto.randomUUID();
   await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
 
@@ -142,14 +142,13 @@ test('tokenized submission with blank client service_type falls back to "General
     });
     const json = await res.json();
     assert.strictEqual(json.ok, true);
-    assert.strictEqual(json.serviceType, 'General', 'fallback is "General", not "Unnamed Event"');
+    assert.strictEqual(json.serviceType, 'General', 'fallback is "General"');
 
     const row = (await queryFeedback()).find((r) => r.submissionId === json.submissionId);
     assert.strictEqual(row.serviceType, 'General');
 
     const relevant = warnings.filter((w) => w.includes('no service_type'));
-    assert.strictEqual(relevant.length, 1, 'a warning is logged for the missing service_type');
-    assert.ok(relevant[0].includes('No Service Co') || relevant[0].includes('noservice@co.com'));
+    assert.strictEqual(relevant.length, 0, 'no service_type warning is logged');
   } finally {
     console.warn = originalWarn;
     if (server.closeAllConnections) server.closeAllConnections();

@@ -204,13 +204,8 @@ app.post('/api/feedback', async (req, res) => {
     const cleaned = cleanData(body);
 
     if (client) {
-      const service = String(client.service_type || '').trim();
-      if (service) {
-        cleaned.eventName = service;
-      } else {
-        cleaned.eventName = 'General';
-        console.warn(`[feedback] client ${client.id} (${client.email || 'no email'}) has no service_type set — submission stored under "General". Fill it in via Manage Clients.`);
-      }
+      // Tokenized submissions no longer carry a client Service Type; fall back to "General".
+      cleaned.eventName = 'General';
     }
     if (request) {
       cleaned.eventDate = request.month;
@@ -431,7 +426,7 @@ function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
 
-const BULK_COLUMNS = { name: 'name', email: 'email', servicetype: 'service_type', status: 'status', accountmanageremail: 'accountManagerEmail' };
+const BULK_COLUMNS = { name: 'name', email: 'email', status: 'status', accountmanageremail: 'accountManagerEmail' };
 
 function mapClientRow(raw) {
   const mapped = {};
@@ -542,7 +537,6 @@ async function syncClientRows(rows) {
     const { action } = await upsertClientByEmail({
       name: mapped.name,
       email: mapped.email,
-      service_type: mapped.service_type,
       status: (mapped.status || 'active').toLowerCase(),
       accountManagerEmail: mapped.accountManagerEmail
     });
@@ -650,7 +644,7 @@ app.post('/api/clients/sync-from-sheet', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, service_type, status, accountManagerEmail } = req.body || {};
+    const { name, email, status, accountManagerEmail } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ ok: false, error: 'Client name is required.' });
     }
@@ -667,10 +661,10 @@ app.post('/api/clients', async (req, res) => {
     const client = await insertClient({
       name,
       email,
-      service_type,
       status,
       accountManagerEmail: amEmail
     });
+    delete client.service_type;
     res.status(201).json({ ok: true, data: client });
   } catch (err) {
     console.error('[POST /api/clients]', err);
@@ -681,6 +675,7 @@ app.post('/api/clients', async (req, res) => {
 app.get('/api/clients', async (req, res) => {
   try {
     const rows = await listClients();
+    rows.forEach((r) => delete r.service_type);
     res.json({ ok: true, count: rows.length, data: rows });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -712,6 +707,7 @@ app.patch('/api/clients/:id', async (req, res) => {
     if (!client) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });
     }
+    delete client.service_type;
     res.json({ ok: true, data: client });
   } catch (err) {
     console.error('[PATCH /api/clients/:id]', err);

@@ -38,7 +38,6 @@ const COLUMN_ALIASES = {
   pdfurl: 'pdfUrl',
   emailsent: 'emailSent',
   created_at: 'created_at',
-  service_type: 'service_type',
   sent_at: 'sent_at',
   submitted: 'submitted',
   account_management_score: 'accountManagementScore',
@@ -500,15 +499,14 @@ async function stats({ from, to } = {}) {
 
 // ---------- Clients ----------
 
-async function insertClient({ name, email, service_type = '', status = 'active', accountManagerEmail = '' }) {
+async function insertClient({ name, email, status = 'active', accountManagerEmail = '' }) {
   return runReturning(`
-    INSERT INTO clients (name, email, service_type, status, account_manager_email, created_at)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO clients (name, email, status, account_manager_email, created_at)
+    VALUES (?, ?, ?, ?, ?)
     RETURNING *
   `, [
     String(name || '').trim(),
     String(email || '').trim(),
-    String(service_type || '').trim(),
     status === 'inactive' ? 'inactive' : 'active',
     String(accountManagerEmail || '').trim(),
     new Date().toISOString()
@@ -543,7 +541,6 @@ async function updateClient(id, fields) {
   const allowed = {
     name: 'name',
     email: 'email',
-    service_type: 'service_type',
     status: 'status',
     accountManagerEmail: 'account_manager_email'
   };
@@ -560,17 +557,17 @@ async function updateClient(id, fields) {
   return row || null;
 }
 
-async function upsertClientByEmail({ name, email, service_type = '', status = 'active', accountManagerEmail }) {
+async function upsertClientByEmail({ name, email, status = 'active', accountManagerEmail }) {
   const existing = await getRow('SELECT * FROM clients WHERE lower(email) = lower(?)', [email]);
   if (existing) {
     const ame = accountManagerEmail !== undefined ? String(accountManagerEmail || '').trim() : (existing.accountManagerEmail || '');
     const row = await runReturning(
-      'UPDATE clients SET name = ?, service_type = ?, status = ?, account_manager_email = ? WHERE id = ? RETURNING *',
-      [name, service_type, status, ame, existing.id]
+      'UPDATE clients SET name = ?, status = ?, account_manager_email = ? WHERE id = ? RETURNING *',
+      [name, status, ame, existing.id]
     );
     return { action: 'updated', row };
   }
-  return { action: 'inserted', row: await insertClient({ name, email, service_type, status, accountManagerEmail }) };
+  return { action: 'inserted', row: await insertClient({ name, email, status, accountManagerEmail }) };
 }
 
 async function deleteClient(id) {

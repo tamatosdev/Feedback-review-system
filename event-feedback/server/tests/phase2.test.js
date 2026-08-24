@@ -27,7 +27,7 @@ test.after(() => {
 });
 
 test('insertFeedbackRequest stores a token and findFeedbackRequestByToken looks it up', async () => {
-  const client = await insertClient({ name: 'Acme Corp', email: 'billing@acme.com', service_type: 'Branding Package' });
+  const client = await insertClient({ name: 'Acme Corp', email: 'billing@acme.com' });
   const token = crypto.randomUUID();
 
   const { created, row } = await insertFeedbackRequest({ client_id: client.id, month: '2026-08', token });
