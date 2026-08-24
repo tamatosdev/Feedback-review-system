@@ -850,12 +850,12 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ---------- Token-based feedback form (Phase 2) ----------
 const RATING_QUESTIONS = [
-  { key: 'accountManagementScore', department: 'Account Management', question: 'How satisfied are you with the responsiveness, communication and overall management of your account?' },
-  { key: 'strategyScore', department: 'Strategy', question: 'How satisfied are you with the quality of strategic thinking, recommendations and strategic direction being provided for your brand?' },
-  { key: 'creativeScore', department: 'Creative', question: 'How satisfied are you with the quality, relevance and originality of the creative ideas and content being developed for your brand?' },
-  { key: 'designContentScore', department: 'Design & Content Production', question: 'How satisfied are you with the quality, consistency and timely delivery of design and content production?' },
-  { key: 'socialContentScore', department: 'Social & Content', question: 'How satisfied are you with the management of your social media platforms, including publishing and community management?' },
-  { key: 'agencyLeadershipScore', department: 'Agency Leadership', question: "Overall, how satisfied are you with Craftsmen Media's performance and the value we are delivering to your business?" }
+  { key: 'accountManagementScore', department: 'Account Management', question: 'How satisfied are you with the responsiveness, communication, and overall management of your account?' },
+  { key: 'strategyScore', department: 'Strategy', question: 'How satisfied are you with the quality of strategic thinking, recommendations, and direction provided for your brand?' },
+  { key: 'creativeScore', department: 'Creative', question: 'How satisfied are you with the quality, relevance, and originality of the creative ideas developed for your brand?' },
+  { key: 'designContentScore', department: 'Design & Content Production', question: 'How satisfied are you with the quality, consistency, and timeliness of our design and content production?' },
+  { key: 'socialContentScore', department: 'Social & Content', question: 'How satisfied are you with the management of your social media platforms, including content publishing, community management, and overall engagement?' },
+  { key: 'agencyLeadershipScore', department: 'Agency Leadership', question: "Overall, how satisfied are you with Craftsmen Media's performance and the value we deliver to your business?" }
 ];
 
 const SCALE_LABELS = ['Very Poor', 'Poor', 'Satisfactory', 'Good', 'Excellent'];

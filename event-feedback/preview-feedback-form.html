@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Feedback Form — Preview (updated questions)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = { theme: { extend: { colors: { brand: '#FFF000', brandDark: '#CCBF00', ink: '#111827' } } } };
+  </script>
+  <style>
+    body { font-family: 'Inter', 'Segoe UI', Arial, sans-serif; }
+    .rating-star { fill: none; stroke: currentColor; stroke-width: 1.6; transition: fill .15s ease; }
+    .rating-box:hover .rating-star { fill: #FFF000; }
+    .preview-banner { background:#FFF000; color:#111827; }
+  </style>
+</head>
+<body class="min-h-screen bg-white text-ink antialiased">
+  <div class="preview-banner text-center text-xs font-bold py-2">PREVIEW ONLY — shows the 6 updated department questions. Star labels &amp; logic are unchanged.</div>
+  <main class="mx-auto max-w-2xl px-4 py-10">
+    <h1 class="text-3xl font-extrabold tracking-tight">We'd love your feedback</h1>
+    <p class="mt-2 text-gray-500 text-sm">Please rate each area from 1 (Very Poor) to 5 (Excellent).</p>
+
+    <div id="ratingQuestions" class="mt-8 space-y-6"></div>
+  </main>
+
+  <script>
+    const RATING_QUESTIONS = [
+      { key: 'accountManagementScore', department: 'Account Management', question: 'How satisfied are you with the responsiveness, communication, and overall management of your account?' },
+      { key: 'strategyScore', department: 'Strategy', question: 'How satisfied are you with the quality of strategic thinking, recommendations, and direction provided for your brand?' },
+      { key: 'creativeScore', department: 'Creative', question: 'How satisfied are you with the quality, relevance, and originality of the creative ideas developed for your brand?' },
+      { key: 'designContentScore', department: 'Design & Content Production', question: 'How satisfied are you with the quality, consistency, and timeliness of our design and content production?' },
+      { key: 'socialContentScore', department: 'Social & Content', question: 'How satisfied are you with the management of your social media platforms, including content publishing, community management, and overall engagement?' },
+      { key: 'agencyLeadershipScore', department: 'Agency Leadership', question: "Overall, how satisfied are you with Craftsmen Media's performance and the value we deliver to your business?" }
+    ];
+    const SCALE_LABELS = ['Very Poor', 'Poor', 'Satisfactory', 'Good', 'Excellent'];
+
+    function ratingOption(n, key) {
+      return '<label class="flex-1 cursor-pointer">' +
+        '<input type="radio" name="' + key + '" value="' + n + '" class="peer sr-only" />' +
+        '<span class="rating-box flex flex-col items-center gap-0.5 rounded-xl border-2 border-gray-200 py-2.5 px-1 text-sm font-bold text-gray-500 transition hover:border-brandDark hover:text-ink peer-checked:border-brand peer-checked:bg-brand/15 peer-checked:text-ink peer-checked:font-extrabold">' +
+          '<svg class="rating-star shrink-0" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><path d="M10 1.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L10 14.9l-5.2 2.7 1-5.8L1.5 7.7l5.9-.9z"/></svg>' +
+          '<span class="text-lg leading-none">' + n + '</span>' +
+          '<span class="text-[9px] font-semibold leading-tight text-center text-gray-400 peer-checked:text-gray-600">' + SCALE_LABELS[n - 1] + '</span>' +
+        '</span>' +
+      '</label>';
+    }
+    function ratingQuestionHtml(q) {
+      const options = [1, 2, 3, 4, 5].map((n) => ratingOption(n, q.key)).join('');
+      return '<div>' +
+        '<p class="text-sm font-extrabold">' + q.department + ' *</p>' +
+        '<p class="text-xs text-gray-500 mb-2">' + q.question + '</p>' +
+        '<div class="flex gap-2">' + options + '</div>' +
+      '</div>';
+    }
+    RATING_QUESTIONS.forEach((q) => {
+      document.getElementById('ratingQuestions').insertAdjacentHTML('beforeend', ratingQuestionHtml(q));
+    });
+  </script>
+</body>
+</html>
