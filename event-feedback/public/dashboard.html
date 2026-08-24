@@ -356,8 +356,8 @@
     function responseRateCard(k) {
       return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
         <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${k.label}</p>
-        <p class="mt-2 text-3xl font-extrabold">${k.percent === null ? '—' : k.percent.toFixed(1) + '%'}</p>
         <p class="mt-1 text-xs text-gray-400 font-semibold">${k.submitted} of ${k.total} feedback request(s) submitted</p>
+        <p class="mt-2 text-3xl font-extrabold">${k.percent === null ? '—' : k.percent.toFixed(1) + '%'}</p>
       </div>`;
     }
 
