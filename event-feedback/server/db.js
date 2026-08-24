@@ -46,7 +46,9 @@ const COLUMN_ALIASES = {
   creative_score: 'creativeScore',
   design_content_score: 'designContentScore',
   social_content_score: 'socialContentScore',
-  agency_leadership_score: 'agencyLeadershipScore'
+  agency_leadership_score: 'agencyLeadershipScore',
+  account_manager: 'accountManager',
+  account_manager_email: 'accountManagerEmail'
 };
 
 // Six department scores (camelCase form fields) and their DB column names.
@@ -132,6 +134,7 @@ const SCHEMA_STATEMENTS = [
     service_type   TEXT,
     status         TEXT NOT NULL DEFAULT 'active',
     account_manager TEXT,
+    account_manager_email TEXT,
     created_at     TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS feedback_requests (
@@ -209,6 +212,9 @@ async function migrateRemote() {
   const clientCols = await pool.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'clients'");
   if (!clientCols.rows.some((c) => String(c.column_name || '').toLowerCase() === 'account_manager')) {
     await pool.query('ALTER TABLE clients ADD COLUMN account_manager TEXT');
+  }
+  if (!clientCols.rows.some((c) => String(c.column_name || '').toLowerCase() === 'account_manager_email')) {
+    await pool.query('ALTER TABLE clients ADD COLUMN account_manager_email TEXT');
   }
 }
 
@@ -369,6 +375,9 @@ function migrateFeedbackReports(dbHandle = db) {
     if (!clientCols.includes('account_manager')) {
       dbHandle.exec('ALTER TABLE clients ADD COLUMN account_manager TEXT');
     }
+    if (!clientCols.includes('account_manager_email')) {
+      dbHandle.exec('ALTER TABLE clients ADD COLUMN account_manager_email TEXT');
+    }
   }
 }
 
@@ -492,16 +501,18 @@ async function stats({ from, to } = {}) {
 
 // ---------- Clients ----------
 
-async function insertClient({ name, email, service_type = '', status = 'active' }) {
+async function insertClient({ name, email, service_type = '', status = 'active', accountManager = '', accountManagerEmail = '' }) {
   return runReturning(`
-    INSERT INTO clients (name, email, service_type, status, created_at)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO clients (name, email, service_type, status, account_manager, account_manager_email, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     RETURNING *
   `, [
     String(name || '').trim(),
     String(email || '').trim(),
     String(service_type || '').trim(),
     status === 'inactive' ? 'inactive' : 'active',
+    String(accountManager || '').trim(),
+    String(accountManagerEmail || '').trim(),
     new Date().toISOString()
   ]);
 }
@@ -528,16 +539,42 @@ async function updateClientStatus(id, status) {
   return row || null;
 }
 
-async function upsertClientByEmail({ name, email, service_type = '', status = 'active' }) {
+// Generic client update: only the provided (defined) fields are written.
+// Used by PATCH /api/clients/:id for status and the Account Manager fields.
+async function updateClient(id, fields) {
+  const allowed = {
+    name: 'name',
+    email: 'email',
+    service_type: 'service_type',
+    status: 'status',
+    accountManager: 'account_manager',
+    accountManagerEmail: 'account_manager_email'
+  };
+  const sets = [];
+  const args = [];
+  for (const [key, col] of Object.entries(allowed)) {
+    if (fields[key] === undefined) continue;
+    sets.push(`${col} = ?`);
+    args.push(String(fields[key] ?? '').trim());
+  }
+  if (!sets.length) return null;
+  args.push(id);
+  const row = await runReturning(`UPDATE clients SET ${sets.join(', ')} WHERE id = ? RETURNING *`, args);
+  return row || null;
+}
+
+async function upsertClientByEmail({ name, email, service_type = '', status = 'active', accountManager, accountManagerEmail }) {
   const existing = await getRow('SELECT * FROM clients WHERE lower(email) = lower(?)', [email]);
   if (existing) {
+    const am = accountManager !== undefined ? String(accountManager || '').trim() : (existing.accountManager || '');
+    const ame = accountManagerEmail !== undefined ? String(accountManagerEmail || '').trim() : (existing.accountManagerEmail || '');
     const row = await runReturning(
-      'UPDATE clients SET name = ?, service_type = ?, status = ? WHERE id = ? RETURNING *',
-      [name, service_type, status, existing.id]
+      'UPDATE clients SET name = ?, service_type = ?, status = ?, account_manager = ?, account_manager_email = ? WHERE id = ? RETURNING *',
+      [name, service_type, status, am, ame, existing.id]
     );
     return { action: 'updated', row };
   }
-  return { action: 'inserted', row: await insertClient({ name, email, service_type, status }) };
+  return { action: 'inserted', row: await insertClient({ name, email, service_type, status, accountManager, accountManagerEmail }) };
 }
 
 async function deleteClient(id) {
@@ -619,6 +656,7 @@ module.exports = {
   listClients,
   listClientEmails,
   updateClientStatus,
+  updateClient,
   upsertClientByEmail,
   deleteClient,
   insertFeedbackRequest,

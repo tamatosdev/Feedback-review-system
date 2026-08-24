@@ -8,7 +8,7 @@ const { analyzeFeedback, analyzeCombined, sentimentColor, fallbackAnalysis } = r
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClient, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
@@ -311,7 +311,13 @@ async function processSubmissionBackground(initialRecord, client) {
 
     if (smtpConfig.smtpPass) {
       try {
-        await sendFeedbackEmail(smtpConfig, record, pdfBuffer, record.pdfUrl);
+        // Copy the client's Account Manager (if configured) on the same
+        // notification email so they hear about their client's feedback.
+        const extraRecipients = [];
+        if (client && client.accountManagerEmail) {
+          extraRecipients.push(String(client.accountManagerEmail).trim());
+        }
+        await sendFeedbackEmail(smtpConfig, record, pdfBuffer, record.pdfUrl, extraRecipients);
         record.emailSent = true;
       } catch (err) {
         console.error('[Email] send failed:', err.message);
@@ -425,7 +431,7 @@ function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
 
-const BULK_COLUMNS = { name: 'name', email: 'email', servicetype: 'service_type', status: 'status' };
+const BULK_COLUMNS = { name: 'name', email: 'email', servicetype: 'service_type', status: 'status', accountmanagername: 'accountManager', accountmanageremail: 'accountManagerEmail' };
 
 function mapClientRow(raw) {
   const mapped = {};
@@ -443,6 +449,10 @@ function clientRowValidationError(mapped) {
   const status = mapped.status ? mapped.status.toLowerCase() : 'active';
   if (status !== 'active' && status !== 'inactive') {
     return `invalid status "${mapped.status || ''}" (must be active or inactive)`;
+  }
+  // Account Manager Email is optional, but when present must be a valid address.
+  if (mapped.accountManagerEmail && !CLIENT_EMAIL_RE.test(mapped.accountManagerEmail)) {
+    return 'invalid account manager email format';
   }
   return null;
 }
@@ -533,7 +543,9 @@ async function syncClientRows(rows) {
       name: mapped.name,
       email: mapped.email,
       service_type: mapped.service_type,
-      status: (mapped.status || 'active').toLowerCase()
+      status: (mapped.status || 'active').toLowerCase(),
+      accountManager: mapped.accountManager,
+      accountManagerEmail: mapped.accountManagerEmail
     });
     if (action === 'inserted') inserted += 1;
     else updated += 1;
@@ -639,7 +651,7 @@ app.post('/api/clients/sync-from-sheet', async (req, res) => {
 
 app.post('/api/clients', async (req, res) => {
   try {
-    const { name, email, service_type, status } = req.body || {};
+    const { name, email, service_type, status, accountManager, accountManagerEmail } = req.body || {};
     if (!name || !String(name).trim()) {
       return res.status(400).json({ ok: false, error: 'Client name is required.' });
     }
@@ -649,11 +661,17 @@ app.post('/api/clients', async (req, res) => {
     if (status && !['active', 'inactive'].includes(status)) {
       return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
     }
+    const amEmail = accountManagerEmail ? String(accountManagerEmail).trim() : '';
+    if (amEmail && !CLIENT_EMAIL_RE.test(amEmail)) {
+      return res.status(400).json({ ok: false, error: 'Account Manager Email must be a valid email address.' });
+    }
     const client = await insertClient({
       name,
       email,
       service_type,
-      status
+      status,
+      accountManager: accountManager ? String(accountManager).trim() : '',
+      accountManagerEmail: amEmail
     });
     res.status(201).json({ ok: true, data: client });
   } catch (err) {
@@ -674,14 +692,28 @@ app.get('/api/clients', async (req, res) => {
 app.patch('/api/clients/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { status } = req.body || {};
-    if (status === undefined) {
-      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status".' });
+    const body = req.body || {};
+    const fields = {};
+    if (body.status !== undefined) {
+      if (!['active', 'inactive'].includes(body.status)) {
+        return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
+      }
+      fields.status = body.status;
     }
-    if (!['active', 'inactive'].includes(status)) {
-      return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
+    if (body.accountManager !== undefined) {
+      fields.accountManager = String(body.accountManager).trim();
     }
-    const client = await updateClientStatus(id, status);
+    if (body.accountManagerEmail !== undefined) {
+      const amEmail = String(body.accountManagerEmail).trim();
+      if (amEmail && !CLIENT_EMAIL_RE.test(amEmail)) {
+        return res.status(400).json({ ok: false, error: 'Account Manager Email must be a valid email address.' });
+      }
+      fields.accountManagerEmail = amEmail;
+    }
+    if (Object.keys(fields).length === 0) {
+      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status", "accountManager", and/or "accountManagerEmail".' });
+    }
+    const client = await updateClient(id, fields);
     if (!client) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });
     }

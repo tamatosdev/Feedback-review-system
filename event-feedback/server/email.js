@@ -67,11 +67,14 @@ function combinedEmailBody(meta, pdfUrl, count) {
   ].join('\n');
 }
 
-async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl) {
+async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl, extraRecipients) {
+  // Always notify ADMIN_EMAIL; additionally copy any extra recipients (e.g. the
+  // client's Account Manager) so they receive the same notification content.
+  const to = [config.adminEmail, ...(extraRecipients || []).filter(Boolean)];
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
-    to: config.adminEmail,
+    to,
     subject: `New Client Feedback – ${safeText(serviceNameOf(record))} (${record.rating}/5)`,
     text: feedbackEmailBody(record, pdfUrl),
     attachments: pdfBuffer

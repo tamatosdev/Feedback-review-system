@@ -74,6 +74,16 @@
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
+          <label for="accountManager" class="block text-xs font-bold mb-1">Account Manager Name</label>
+          <input id="accountManager" name="accountManager" type="text" placeholder="e.g. Jane Doe"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
+          <label for="accountManagerEmail" class="block text-xs font-bold mb-1">Account Manager Email</label>
+          <input id="accountManagerEmail" name="accountManagerEmail" type="email" placeholder="jane@agency.com"
+            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div>
           <label for="status" class="block text-xs font-bold mb-1">Status</label>
           <select id="status" name="status"
             class="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand">
@@ -102,6 +112,8 @@
               <th class="px-5 py-3 font-bold">Client Name</th>
               <th class="px-5 py-3 font-bold">Email</th>
               <th class="px-5 py-3 font-bold">Service Type</th>
+              <th class="px-5 py-3 font-bold">Account Manager</th>
+              <th class="px-5 py-3 font-bold">AM Email</th>
               <th class="px-5 py-3 font-bold">Status</th>
               <th class="px-5 py-3 font-bold">Created</th>
               <th class="px-5 py-3 font-bold">Actions</th>
@@ -142,23 +154,51 @@
       $('message').classList.add('hidden');
     }
 
+    let editingId = null;
+
     function renderClients(list) {
       $('rowCount').textContent = list.length + ' client(s)';
       $('emptyState').classList.toggle('hidden', list.length > 0);
-      $('tableBody').innerHTML = list.map((c) => `
+      $('tableBody').innerHTML = list.map((c) => {
+        if (c.id === editingId) {
+          return `
+        <tr class="hover:bg-gray-50/60 transition">
+          <td class="px-5 py-4"><input data-edit="name" value="${esc(c.name)}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
+          <td class="px-5 py-4"><input data-edit="email" value="${esc(c.email)}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
+          <td class="px-5 py-4"><input data-edit="service_type" value="${esc(c.service_type || '')}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
+          <td class="px-5 py-4"><input data-edit="accountManager" value="${esc(c.accountManager || '')}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
+          <td class="px-5 py-4"><input data-edit="accountManagerEmail" value="${esc(c.accountManagerEmail || '')}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
+          <td class="px-5 py-4">
+            <select data-edit="status" class="rounded-lg border border-gray-200 px-2 py-1 text-sm">
+              <option value="active" ${c.status === 'active' ? 'selected' : ''}>Active</option>
+              <option value="inactive" ${c.status === 'inactive' ? 'selected' : ''}>Inactive</option>
+            </select>
+          </td>
+          <td class="px-5 py-4 text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</td>
+          <td class="px-5 py-4 whitespace-nowrap space-x-3">
+            <button data-action="save" data-id="${c.id}" class="rounded-full bg-ink text-white px-3 py-1 text-xs font-bold hover:opacity-90 transition">Save</button>
+            <button data-action="cancel" class="text-xs font-bold text-gray-500 underline underline-offset-2 hover:text-ink">Cancel</button>
+          </td>
+        </tr>`;
+        }
+        return `
         <tr class="hover:bg-gray-50/60 transition">
           <td class="px-5 py-4 font-bold">${esc(c.name)}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.email)}</td>
           <td class="px-5 py-4 text-gray-600">${esc(c.service_type || '—')}</td>
+          <td class="px-5 py-4 text-gray-600">${esc(c.accountManager || '—')}</td>
+          <td class="px-5 py-4 text-gray-600">${esc(c.accountManagerEmail || '—')}</td>
           <td class="px-5 py-4"><span class="inline-block rounded-full px-3 py-1 text-xs font-bold ${statusClasses[c.status] || 'bg-gray-100 text-gray-600'}">${esc(c.status)}</span></td>
           <td class="px-5 py-4 text-xs text-gray-500">${new Date(c.created_at).toLocaleString()}</td>
           <td class="px-5 py-4 whitespace-nowrap space-x-3">
             <button data-action="toggle" data-id="${c.id}" data-status="${esc(c.status)}" class="rounded-full border border-gray-200 px-3 py-1 text-xs font-bold text-gray-600 hover:border-brandDark hover:text-brandDark transition">
               ${c.status === 'active' ? 'Set inactive' : 'Set active'}
             </button>
+            <button data-action="edit" data-id="${c.id}" class="text-xs font-bold text-brandDark underline underline-offset-2 hover:text-ink">Edit</button>
             <button data-action="delete" data-id="${c.id}" data-name="${esc(c.name)}" class="text-xs font-bold text-red-600 underline underline-offset-2 hover:text-red-700">Delete</button>
           </td>
-        </tr>`).join('');
+        </tr>`;
+      }).join('');
     }
 
     async function loadClients() {
@@ -222,6 +262,37 @@
         const json = await res.json();
         if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to delete client.');
         showMessage(`Client "${name}" deleted (${json.data.removedFeedbackRequests} feedback request(s) removed).`, false);
+        await loadClients();
+      } catch (err) {
+        showMessage(err.message, true);
+      }
+    }
+
+    function editClient(id) {
+      editingId = id;
+      loadClients();
+    }
+
+    async function saveClient(id) {
+      const row = $('tableBody').querySelector(`button[data-action="save"][data-id="${id}"]`).closest('tr');
+      const payload = {};
+      row.querySelectorAll('[data-edit]').forEach((el) => {
+        payload[el.getAttribute('data-edit')] = el.value.trim();
+      });
+      if (payload.accountManagerEmail && !EMAIL_RE.test(payload.accountManagerEmail)) {
+        showMessage('Account Manager Email must be a valid email address.', true);
+        return;
+      }
+      try {
+        const res = await fetch(`/api/clients/${id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const json = await res.json();
+        if (!res.ok || !json.ok) throw new Error(json.error || 'Failed to update client.');
+        showMessage(`Client "${json.data.name}" updated.`, false);
+        editingId = null;
         await loadClients();
       } catch (err) {
         showMessage(err.message, true);
@@ -296,15 +367,21 @@
         name,
         email,
         service_type: $('serviceType').value.trim(),
-        status: $('status').value
+        status: $('status').value,
+        accountManager: $('accountManager').value.trim(),
+        accountManagerEmail: $('accountManagerEmail').value.trim()
       });
     });
 
     $('tableBody').addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-action]');
       if (!btn) return;
-      if (btn.dataset.action === 'toggle') toggleClient(btn.dataset.id, btn.dataset.status);
-      if (btn.dataset.action === 'delete') deleteClient(btn.dataset.id, btn.dataset.name);
+      const action = btn.dataset.action;
+      if (action === 'toggle') toggleClient(btn.dataset.id, btn.dataset.status);
+      if (action === 'delete') deleteClient(btn.dataset.id, btn.dataset.name);
+      if (action === 'edit') editClient(btn.dataset.id);
+      if (action === 'cancel') { editingId = null; loadClients(); }
+      if (action === 'save') saveClient(btn.dataset.id);
     });
 
     $('logoutBtn').addEventListener('click', async () => {
