@@ -281,3 +281,28 @@ test('DELETE /api/clients/:id succeeds when the client has no feedback reports',
     stopServer(server);
   }
 });
+
+test('sheet sync updates an existing client when the name header is "Client Name"', async () => {
+  const client = await insertClient({ name: 'ebad', email: 'tamatos.dev@gmail.com' });
+  assert.strictEqual(client.accountManagerEmail, '', 'precondition: no AM email yet');
+
+  const { server, base } = startServer();
+  try {
+    const res = await fetch(`${base}/api/clients/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Sync-Secret': 'test-secret' },
+      body: JSON.stringify({ clients: [{ 'Client Name': 'ebad', Email: 'tamatos.dev@gmail.com', 'Account Manager Email': 'ebadk2570@gmail.com', Status: 'Active' }] })
+    });
+    const json = await res.json();
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.updated, 1, 'existing client should be updated');
+    assert.strictEqual(json.skipped.length, 0, 'row must NOT be skipped');
+    assert.strictEqual(json.inserted, 0);
+
+    const updated = await getClient(client.id);
+    assert.strictEqual(updated.accountManagerEmail, 'ebadk2570@gmail.com', 'AM email should be updated from the sheet');
+  } finally {
+    stopServer(server);
+  }
+});

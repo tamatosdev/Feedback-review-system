@@ -599,7 +599,7 @@ The page has a **Sync from Google Sheet** card above the add form (no file input
 
 | Column | Required | Notes |
 |---|---|---|
-| `Name` | yes | Skipped with a reason if blank |
+| `Name` (or `Client Name`) | yes | Skipped with a reason if blank |
 | `Email` | yes | Must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`; duplicates (already in DB **or** earlier in the same sync) are updated/skipped per the behavior below |
 | `Status` | no | `active` / `inactive` (case-insensitive); blank defaults to `active`, anything else skips the row with a reason |
 | `Account Manager Email` | no | Optional; when present must match `^[^\s@]+@[^\s@]+\.[^\s@]+$`, otherwise the row is skipped with reason `invalid account manager email format` (the rest of the row is still validated first) |

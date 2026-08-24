@@ -426,7 +426,7 @@ function normalizeHeaderKey(key) {
   return String(key).toLowerCase().replace(/[\s_]+/g, '');
 }
 
-const BULK_COLUMNS = { name: 'name', email: 'email', status: 'status', accountmanageremail: 'accountManagerEmail' };
+const BULK_COLUMNS = { name: 'name', clientname: 'name', email: 'email', status: 'status', accountmanageremail: 'accountManagerEmail' };
 
 function mapClientRow(raw) {
   const mapped = {};
