@@ -8,7 +8,7 @@ const { analyzeFeedback, analyzeCombined, sentimentColor, fallbackAnalysis } = r
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
-const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus, updateClient, upsertClientByEmail, deleteClient, dbMode, dbHost, pingDb, listTables } = require('./db');
+const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus,   updateClient, upsertClientByEmail, deleteClient, clientFeedbackReportCount, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
@@ -718,6 +718,13 @@ app.patch('/api/clients/:id', async (req, res) => {
 app.delete('/api/clients/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
+    const reportCount = await clientFeedbackReportCount(id);
+    if (reportCount > 0) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Cannot delete this client — they have existing feedback reports. Set them to inactive instead.'
+      });
+    }
     const { deleted, removedRequests } = await deleteClient(id);
     if (!deleted) {
       return res.status(404).json({ ok: false, error: 'Client not found.' });

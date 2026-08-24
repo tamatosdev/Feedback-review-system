@@ -577,6 +577,12 @@ async function deleteClient(id) {
   return { deleted: deletedInfo.changes > 0, removedRequests };
 }
 
+// Count of feedback_reports linked to a client (used to block deletion).
+async function clientFeedbackReportCount(id) {
+  const row = await getRow('SELECT COUNT(*) AS count FROM feedback_reports WHERE client_id = ?', [id]);
+  return Number((row && row.count) || 0);
+}
+
 // ---------- Feedback requests (monthly token sends) ----------
 
 async function insertFeedbackRequest({ client_id, month, token }) {
@@ -652,6 +658,7 @@ module.exports = {
   updateClient,
   upsertClientByEmail,
   deleteClient,
+  clientFeedbackReportCount,
   insertFeedbackRequest,
   findFeedbackRequestByToken,
   markFeedbackRequestSubmitted,

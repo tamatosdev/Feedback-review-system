@@ -27,7 +27,7 @@ nodemailer.createTransport = () => ({
   sendMail: async (mail) => { captured.push(mail); return { messageId: 'test-message-id' }; }
 });
 
-const { db, insertClient, insertFeedbackRequest, getClient, upsertClientByEmail } = require('../db');
+const { db, insertClient, insertFeedbackRequest, getClient, upsertClientByEmail, insertFeedback, clientFeedbackReportCount } = require('../db');
 let app;
 
 // The pull sync reads SHEET_CSV_URL at module load, so start the sheet server
@@ -233,4 +233,51 @@ test('upsertClientByEmail preserves existing AM email when omitted and overwrite
 
   const third = await upsertClientByEmail({ name: 'Upsert AM Renamed', email: 'ups@am.com', accountManagerEmail: 'new@am.com' });
   assert.strictEqual(third.row.accountManagerEmail, 'new@am.com', 'provided AM email overwrites');
+});
+
+test('DELETE /api/clients/:id is blocked when the client has feedback reports', async () => {
+  const client = await insertClient({ name: 'Has Reports', email: 'hasreports@test.com' });
+  await insertFeedback({
+    submissionId: 'FB-DEL-BLOCK',
+    timestamp: new Date().toISOString(),
+    serviceType: 'General',
+    month: '2026-09',
+    client_id: client.id,
+    attendeeName: 'A', attendeeEmail: 'a@b.com', hasValidEmail: 1, companyName: '',
+    rating: 4, comments: 'c', suggestions: null, sentiment: 'positive', summary: 's',
+    urgency: 'low', highlights: [], improvementSuggestions: [], pdfUrl: '', emailSent: 0,
+    accountManagementScore: 4, strategyScore: 4, creativeScore: 4, designContentScore: 4,
+    socialContentScore: 4, agencyLeadershipScore: 4
+  });
+  assert.strictEqual(await clientFeedbackReportCount(client.id), 1);
+
+  const { server, base } = startServer();
+  try {
+    const res = await fetch(`${base}/api/clients/${client.id}`, { method: 'DELETE' });
+    const json = await res.json();
+    assert.strictEqual(res.status, 400);
+    assert.strictEqual(json.ok, false);
+    assert.match(json.error, /existing feedback reports/);
+    const stillThere = await getClient(client.id);
+    assert.ok(stillThere, 'client must NOT be deleted when it has feedback reports');
+  } finally {
+    stopServer(server);
+  }
+});
+
+test('DELETE /api/clients/:id succeeds when the client has no feedback reports', async () => {
+  const client = await insertClient({ name: 'No Reports', email: 'noreports@test.com' });
+  assert.strictEqual(await clientFeedbackReportCount(client.id), 0);
+
+  const { server, base } = startServer();
+  try {
+    const res = await fetch(`${base}/api/clients/${client.id}`, { method: 'DELETE' });
+    const json = await res.json();
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(json.ok, true);
+    const gone = await getClient(client.id);
+    assert.strictEqual(gone, undefined, 'client should be deleted when it has no feedback reports');
+  } finally {
+    stopServer(server);
+  }
 });
