@@ -181,7 +181,6 @@ function writeFeedbackSection(doc, r, index, fullPage = true) {
 
   sectionHeading(doc, 'Project / Service Information');
   infoTable(doc, [
-    ['Project Name / Service Name', service],
     ['Service Date / Project Completion Date', dateVal],
     ['Overall Rating', `${r.rating} / 5`],
     ['Urgency', r.urgency]

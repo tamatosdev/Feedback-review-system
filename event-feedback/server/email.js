@@ -4,10 +4,12 @@ const { DEPARTMENT_SCORES, scoreText, esc, serviceNameOf, safeText } = require('
 const BRAND_NAME = 'Craftsmen Media';
 
 function createTransport(config) {
+  const useSecure = config.smtpSecure !== false;
   return nodemailer.createTransport({
     host: config.smtpHost,
-    port: Number(config.smtpPort) || 465,
-    secure: true,
+    port: Number(config.smtpPort) || (useSecure ? 465 : 587),
+    secure: useSecure,
+    requireTLS: !useSecure,
     auth: {
       user: config.smtpUser,
       pass: config.smtpPass
