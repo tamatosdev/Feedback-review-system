@@ -111,9 +111,9 @@ function reportHTML(record, logoPath) {
     </tr>
     <tr>
       <td style="padding:28px 32px">
-        <h2 style="color:${ACCENT};text-shadow:0 1px 0 rgba(0,0,0,.25);font-size:18px;margin:24px 0 10px;letter-spacing:.5px">PROJECT / SERVICE INFORMATION</h2>
+        <h2 style="color:${ACCENT};text-shadow:0 1px 0 rgba(0,0,0,.25);font-size:18px;margin:24px 0 10px;letter-spacing:.5px">FEEDBACK INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
-          ${infoRow('Service Date / Project Completion Date', safeText(submissionDateOf(record)))}
+          ${infoRow('Form Submission Date', safeText(submissionDateOf(record)))}
           ${infoRow('Overall Rating', `${record.rating} / 5`)}
           ${badgeRow(record.sentiment)}
         </table>

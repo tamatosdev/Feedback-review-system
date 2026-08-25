@@ -102,7 +102,7 @@ test('reportHTML renders serviceType/month from a DB row (no literal "undefined"
 
   const html = reportHTML(record);
   assert.ok(!html.includes('Website Revamp'), 'service name must NOT appear in the report');
-  assert.strictEqual(fieldValue(html, 'Service Date / Project Completion Date'), ymd(record.timestamp), 'service date should be the submission date');
+  assert.strictEqual(fieldValue(html, 'Form Submission Date'), ymd(record.timestamp), 'service date should be the submission date');
   assert.ok(!html.includes('undefined'), 'must never render literal "undefined"');
   assert.ok(!html.includes('Not provided'), 'present date must not show "Not provided"');
 });
@@ -138,7 +138,7 @@ test('reportHTML falls back to N/A for a genuinely missing service name / date',
   await insertFeedback(nullDateRow);
   const fromDb = await getFeedbackReport(nullDateRow.submissionId);
   const dbHtml = reportHTML(fromDb);
-  assert.strictEqual(fieldValue(dbHtml, 'Service Date / Project Completion Date'), ymd(fromDb.timestamp), 'null month with a submission timestamp shows the submission date');
+  assert.strictEqual(fieldValue(dbHtml, 'Form Submission Date'), ymd(fromDb.timestamp), 'null month with a submission timestamp shows the submission date');
   assert.ok(!dbHtml.includes('undefined'));
 });
 
@@ -181,7 +181,7 @@ test('on-demand report for a tokenized submission shows the "General" fallback s
     const repHtml = await repRes.text();
     const stored = await getFeedbackReport(json.submissionId);
     assert.ok(!repHtml.includes('General'), 'service name (General fallback) must not appear in the report');
-    assert.strictEqual(fieldValue(repHtml, 'Service Date / Project Completion Date'), ymd(stored.timestamp), 'service date should be the submission date');
+    assert.strictEqual(fieldValue(repHtml, 'Form Submission Date'), ymd(stored.timestamp), 'service date should be the submission date');
     assert.ok(!repHtml.includes('2026-09'), 'service date should NOT be the feedback request month');
     assert.ok(!repHtml.includes('undefined'), 'must never render literal "undefined"');
   } finally {

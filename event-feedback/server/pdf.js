@@ -179,9 +179,9 @@ function writeFeedbackSection(doc, r, index, fullPage = true) {
   const title = fullPage ? 'Client Feedback Report' : `#${index}`;
   drawHeader(doc, fullPage ? title : title, fullPage ? '' : `${r.attendeeName} · ${dateVal} · ${r.submissionId}`);
 
-  sectionHeading(doc, 'Project / Service Information');
+  sectionHeading(doc, 'Feedback Information');
   infoTable(doc, [
-    ['Service Date / Project Completion Date', submissionDate],
+    ['Form Submission Date', submissionDate],
     ['Overall Rating', `${r.rating} / 5`],
     ['Urgency', r.urgency]
   ]);
