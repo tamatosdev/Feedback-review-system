@@ -24,6 +24,21 @@ function serviceNameOf(r) {
 function serviceDateOf(r) {
   return r ? (r.month ?? r.eventDate) : undefined;
 }
+// Actual date the client submitted the form (timestamp), rendered as the date
+// portion of the report's existing ISO style (YYYY-MM-DD, UTC). Falls back to
+// the stored service-date/month value when no timestamp is present.
+function submissionDateOf(r) {
+  if (r && r.timestamp) {
+    const d = new Date(r.timestamp);
+    if (!isNaN(d.getTime())) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+  }
+  return serviceDateOf(r) ?? 'N/A';
+}
 function safeText(v, fallback = 'N/A') {
   return (v === undefined || v === null || v === '') ? fallback : v;
 }
@@ -98,7 +113,7 @@ function reportHTML(record, logoPath) {
       <td style="padding:28px 32px">
         <h2 style="color:${ACCENT};text-shadow:0 1px 0 rgba(0,0,0,.25);font-size:18px;margin:24px 0 10px;letter-spacing:.5px">PROJECT / SERVICE INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
-          ${infoRow('Service Date / Project Completion Date', safeText(serviceDateOf(record)))}
+          ${infoRow('Service Date / Project Completion Date', safeText(submissionDateOf(record)))}
           ${infoRow('Overall Rating', `${record.rating} / 5`)}
           ${badgeRow(record.sentiment)}
         </table>
@@ -211,4 +226,4 @@ function combinedHTML(meta, rows, logoPath) {
 </html>`;
 }
 
-module.exports = { reportHTML, combinedHTML, stars, badge, esc, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, safeText };
+module.exports = { reportHTML, combinedHTML, stars, badge, esc, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, submissionDateOf, safeText };

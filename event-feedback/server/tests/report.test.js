@@ -66,6 +66,16 @@ function validReportRow(overrides = {}) {
   };
 }
 
+function ymd(iso) {
+  const d = new Date(iso);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+}
+function fieldValue(html, label) {
+  const esc = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m = html.match(new RegExp(esc + '<\\/td><td[^>]*>([^<]*)<\\/td>'));
+  return m ? m[1] : null;
+}
+
 test.before(async () => {
   db.exec('DELETE FROM feedback_requests');
   db.exec('DELETE FROM clients');
@@ -92,7 +102,7 @@ test('reportHTML renders serviceType/month from a DB row (no literal "undefined"
 
   const html = reportHTML(record);
   assert.ok(html.includes('Website Revamp'), 'service name should come from serviceType');
-  assert.ok(html.includes('2026-08'), 'service date should come from month');
+  assert.strictEqual(fieldValue(html, 'Service Date / Project Completion Date'), ymd(record.timestamp), 'service date should be the submission date');
   assert.ok(!html.includes('undefined'), 'must never render literal "undefined"');
   assert.ok(!html.includes('Not provided'), 'present date must not show "Not provided"');
 });
@@ -128,7 +138,7 @@ test('reportHTML falls back to N/A for a genuinely missing service name / date',
   await insertFeedback(nullDateRow);
   const fromDb = await getFeedbackReport(nullDateRow.submissionId);
   const dbHtml = reportHTML(fromDb);
-  assert.ok(dbHtml.includes('N/A'), 'null month must fall back to N/A');
+  assert.strictEqual(fieldValue(dbHtml, 'Service Date / Project Completion Date'), ymd(fromDb.timestamp), 'null month with a submission timestamp shows the submission date');
   assert.ok(!dbHtml.includes('undefined'));
 });
 
@@ -168,8 +178,10 @@ test('on-demand report for a tokenized submission shows the "General" fallback s
     const repRes = await fetch(`${base}/reports/${json.submissionId}.html`);
     assert.strictEqual(repRes.status, 200);
     const repHtml = await repRes.text();
+    const stored = await getFeedbackReport(json.submissionId);
     assert.ok(repHtml.includes('General'), 'tokenized submissions fall back to "General" without a client Service Type');
-    assert.ok(repHtml.includes('2026-09'), 'service date should come from the feedback request month');
+    assert.strictEqual(fieldValue(repHtml, 'Service Date / Project Completion Date'), ymd(stored.timestamp), 'service date should be the submission date');
+    assert.ok(!repHtml.includes('2026-09'), 'service date should NOT be the feedback request month');
     assert.ok(!repHtml.includes('undefined'), 'must never render literal "undefined"');
   } finally {
     if (server.closeAllConnections) server.closeAllConnections();
