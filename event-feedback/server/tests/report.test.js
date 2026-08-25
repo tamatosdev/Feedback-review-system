@@ -101,7 +101,7 @@ test('reportHTML renders serviceType/month from a DB row (no literal "undefined"
   assert.strictEqual(record.eventName, undefined, 'DB row must NOT carry the legacy eventName field');
 
   const html = reportHTML(record);
-  assert.ok(html.includes('Website Revamp'), 'service name should come from serviceType');
+  assert.ok(!html.includes('Website Revamp'), 'service name must NOT appear in the report');
   assert.strictEqual(fieldValue(html, 'Service Date / Project Completion Date'), ymd(record.timestamp), 'service date should be the submission date');
   assert.ok(!html.includes('undefined'), 'must never render literal "undefined"');
   assert.ok(!html.includes('Not provided'), 'present date must not show "Not provided"');
@@ -152,8 +152,9 @@ test('combinedHTML shows serviceType from DB rows (no literal "undefined")', asy
     keyHighlights: [], topImprovementSuggestions: []
   };
   const html = combinedHTML(meta, records, null);
-  assert.ok(html.includes('Website Revamp'), 'first service shown');
-  assert.ok(html.includes('SEO Retainer'), 'second service shown');
+  assert.ok(!html.includes('Website Revamp'), 'service name must not appear in combined report');
+  assert.ok(!html.includes('SEO Retainer'), 'service name must not appear in combined report');
+  assert.ok(html.includes('Tester'), 'attendee name still shown in combined report');
   assert.ok(!html.includes('undefined'), 'combined must never render literal "undefined"');
 });
 
@@ -179,7 +180,7 @@ test('on-demand report for a tokenized submission shows the "General" fallback s
     assert.strictEqual(repRes.status, 200);
     const repHtml = await repRes.text();
     const stored = await getFeedbackReport(json.submissionId);
-    assert.ok(repHtml.includes('General'), 'tokenized submissions fall back to "General" without a client Service Type');
+    assert.ok(!repHtml.includes('General'), 'service name (General fallback) must not appear in the report');
     assert.strictEqual(fieldValue(repHtml, 'Service Date / Project Completion Date'), ymd(stored.timestamp), 'service date should be the submission date');
     assert.ok(!repHtml.includes('2026-09'), 'service date should NOT be the feedback request month');
     assert.ok(!repHtml.includes('undefined'), 'must never render literal "undefined"');

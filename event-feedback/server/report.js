@@ -97,7 +97,7 @@ function reportHTML(record, logoPath) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Client Feedback Report – ${esc(safeText(serviceNameOf(record), 'Client Feedback'))}</title>
+<title>Client Feedback Report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -170,7 +170,7 @@ function combinedHTML(meta, rows, logoPath) {
       : '';
     return `
     <tr><td style="padding:22px 0 6px">
-      <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1} – ${esc(safeText(serviceNameOf(r)))}</h3>
+      <h3 style="color:${BLACK};margin:0;font-size:15px">#${i + 1}</h3>
       <span style="color:#6b7280;font-size:12px">${esc(r.attendeeName)} · ${esc(safeText(serviceDateOf(r)))} · ${esc(r.submissionId)}</span>
       <div style="margin-top:8px">${stars(r.rating)} &nbsp; ${badge(r.sentiment)}</div>
       ${scoresLine}
