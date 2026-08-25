@@ -82,7 +82,7 @@
         <button id="applyBtn" class="bg-ink text-white text-sm font-bold rounded-xl px-5 py-2.5 hover:opacity-90 transition">Apply Filters</button>
         <button id="clearBtn" class="text-sm font-semibold text-gray-500 hover:text-ink px-2 transition">Clear</button>
         <button id="combinedBtn" class="ml-auto bg-brand hover:bg-brandDark text-ink text-sm font-extrabold rounded-xl px-5 py-2.5 transition disabled:opacity-50 disabled:cursor-not-allowed">
-          Generate Combined Report for Selected Dates
+          Generate Consolidated Report
         </button>
       </div>
       <p id="combinedResult" class="hidden text-sm font-semibold"></p>
@@ -212,8 +212,7 @@
     const STATUS_OPTIONS = [
       { key: '', label: 'All statuses' },
       { key: 'healthy', label: 'Healthy' },
-      { key: 'attention', label: 'Attention Required' },
-      { key: 'corrective', label: 'Corrective Action Required' }
+      { key: 'attention', label: 'Attention Required' }
     ];
     const DEPT_LABELS = {
       accountManagementScore: 'Account Management',
@@ -356,8 +355,8 @@
     function responseRateCard(k) {
       return `<div class="bg-white border border-gray-100 rounded-2xl shadow-md p-5">
         <p class="text-xs font-bold uppercase tracking-wider text-gray-400">${k.label}</p>
-        <p class="mt-1 text-xs text-gray-400 font-semibold">${k.submitted} of ${k.total} feedback request(s) submitted</p>
-        <p class="mt-2 text-3xl font-extrabold">${k.percent === null ? '—' : k.percent.toFixed(1) + '%'}</p>
+        <p class="mt-1 text-3xl font-extrabold">${k.submitted} of ${k.total} feedback request(s) submitted</p>
+        <p class="mt-2 text-xs text-gray-400">${k.percent === null ? '—' : k.percent.toFixed(1) + '%'}</p>
       </div>`;
     }
 
@@ -415,9 +414,9 @@
           <thead class="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
             <tr>
               <th class="px-5 py-3 font-bold">Department</th>
-              <th class="px-5 py-3 font-bold">This Month</th>
-              <th class="px-5 py-3 font-bold">Last Month</th>
-              <th class="px-5 py-3 font-bold">MoM</th>
+              <th class="px-5 py-3 font-bold">Current Month</th>
+              <th class="px-5 py-3 font-bold">Previous Month</th>
+              <th class="px-5 py-3 font-bold">Month over Month</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">${rows}</tbody>

@@ -86,7 +86,7 @@ function seedSubmission(clientId, month, s) {
 }
 
 function alertMails() {
-  return captured.filter((m) => m.subject.startsWith('ALERT:') || m.subject.startsWith('ESCALATION:') || m.subject.startsWith('Reminder:'));
+  return captured.filter((m) => m.subject.startsWith('ALERT:') || m.subject.startsWith('ESCALATION:') || m.subject.startsWith('Gentle Reminder'));
 }
 
 async function startServer() {
@@ -275,10 +275,14 @@ test('no-response check: old request -> client reminder + internal alert, once o
   assert.strictEqual(first.internalSent, 1, 'internal alert for the old request');
   assert.strictEqual(first.skipped, 1, 'recent request is not due yet');
 
-  const reminder = alertMails().find((m) => m.subject.startsWith('Reminder:') && m.to === 'silent@alerts.test');
+  const reminder = alertMails().find((m) => m.subject.startsWith('Gentle Reminder') && m.to === 'silent@alerts.test');
   assert.ok(reminder, 'client reminder sent to the client');
+  assert.strictEqual(reminder.subject, 'Gentle Reminder | Client Feedback', 'updated reminder subject');
   assert.ok(reminder.text.includes(`http://app.test/feedback/${oldReq.token}`), 'reminder re-includes the feedback link');
-  assert.ok(reminder.text.includes('10 days'));
+  assert.ok(reminder.text.includes('gentle reminder'), 'updated reminder body copy (plain text)');
+  assert.ok(reminder.text.includes('The Craftsmen Media Support Team'), 'new sign-off present');
+  assert.ok(reminder.html.includes(`http://app.test/feedback/${oldReq.token}`), 'html alternative includes the feedback link');
+  assert.ok(reminder.html.includes('Craftsmen Media Support Team'), 'html alternative present');
 
   const internal = alertMails().find((m) => m.subject.startsWith('ALERT: No response') && m.to === 'admin@alerts.test');
   assert.ok(internal, 'internal no-response alert to ADMIN_EMAIL');
@@ -293,6 +297,40 @@ test('no-response check: old request -> client reminder + internal alert, once o
   assert.strictEqual(captured.length, before, 'no duplicate emails');
 
   assert.strictEqual(recentReq.submitted, 0);
+});
+
+test('no-response check fires at the 5-day default threshold (was 7)', async () => {
+  captured.length = 0;
+  const now = new Date();
+  const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const fiveDaysAgo = new Date(Date.now() - 5 * 86400000).toISOString();
+
+  const client = await insertClient({ name: 'FiveDay Client', email: 'five@alerts.test' });
+  const req = (await insertFeedbackRequest({ client_id: client.id, month: currentYm, token: crypto.randomUUID() })).row;
+  db.prepare('UPDATE feedback_requests SET sent_at = ? WHERE id = ?').run(fiveDaysAgo, req.id);
+
+  const res = await runNoResponseCheck({ smtpConfig: SMTP, appBaseUrl: 'http://app.test' });
+  assert.ok(res.reminded >= 1, 'at least the 5-day-old request is reminded');
+  const reminder = captured.find((m) => m.to === 'five@alerts.test' && m.subject.startsWith('Gentle Reminder'));
+  assert.ok(reminder, 'the 5-day-old client received a reminder');
+  assert.ok(reminder.text.includes(`http://app.test/feedback/${req.token}`), 'reminder includes the feedback link');
+  assert.ok(reminder.html.includes(`http://app.test/feedback/${req.token}`), 'html reminder includes the feedback link');
+});
+
+test('no-response check does NOT fire before the 5-day threshold (4 days)', async () => {
+  captured.length = 0;
+  const now = new Date();
+  const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const fourDaysAgo = new Date(Date.now() - 4 * 86400000).toISOString();
+
+  const client = await insertClient({ name: 'FourDay Client', email: 'four@alerts.test' });
+  const req = (await insertFeedbackRequest({ client_id: client.id, month: currentYm, token: crypto.randomUUID() })).row;
+  db.prepare('UPDATE feedback_requests SET sent_at = ? WHERE id = ?').run(fourDaysAgo, req.id);
+
+  const res = await runNoResponseCheck({ smtpConfig: SMTP, appBaseUrl: 'http://app.test' });
+  assert.ok(res.skipped >= 1, 'at least the 4-day-old request is skipped');
+  const reminder = captured.find((m) => m.to === 'four@alerts.test' && m.subject.startsWith('Gentle Reminder'));
+  assert.strictEqual(reminder, undefined, 'no reminder for the 4-day-old client (below the 5-day default)');
 });
 
 test('POST /api/cron/no-response-check endpoint runs the check', async () => {

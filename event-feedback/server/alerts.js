@@ -7,7 +7,7 @@ const ALERT_EMAIL = (process.env.ALERT_EMAIL || '').trim() || (process.env.ADMIN
 const LOW_SCORE_THRESHOLD = Number(process.env.ALERT_LOW_SCORE_THRESHOLD || 3.0);
 const MOM_DROP_THRESHOLD = Number(process.env.ALERT_MOM_DROP_THRESHOLD || 1.0);
 const CONSECUTIVE_LOW_MONTHS = Number(process.env.ALERT_CONSECUTIVE_LOW_MONTHS || 2);
-const NO_RESPONSE_DAYS = Number(process.env.ALERT_NO_RESPONSE_DAYS || 7);
+const NO_RESPONSE_DAYS = Number(process.env.ALERT_NO_RESPONSE_DAYS || 5);
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function num(value) {
@@ -216,9 +216,6 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
         await email.sendAlertEmail(smtpConfig, {
           to: r.email,
           ...email.noResponseClientReminderContent(
-            { name: r.name },
-            month,
-            days,
             `${base}/feedback/${r.token}`
           )
         });

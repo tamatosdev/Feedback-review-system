@@ -99,30 +99,39 @@ async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
 }
 
 function clientFeedbackRequestBody(client, link) {
-  const company = client.name || 'your service';
-  return [
-    `Hi ${client.name},`,
+  const text = [
+    `Dear Client,`,
     ``,
-    `Thank you for working with us. We'd love to hear your feedback so we can keep improving.`,
+    `At Craftsmen Media, we take pride in the work we do and believe that strong partnerships are built through collaboration and continuous improvement. Your feedback helps us understand what we are doing well and where we can improve, enabling us to continually strengthen the quality of our work, service, and partnership with you.`,
     ``,
-    `Please take a minute to complete our short feedback form:`,
-    link,
+    `We would appreciate a few minutes of your time to share your experience with us over the past month. Your input will enable us to better understand your needs and identify opportunities to further enhance the way we work together.`,
     ``,
-    `Your answers will only take about a minute — thank you for your time.`,
+    `Please share your feedback here: ${link}`,
     ``,
     `Best regards,`,
-    `${BRAND_NAME}`
+    `The Craftsmen Media Support Team`
   ].join('\n');
+
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
+    `<p style="margin:0 0 12px">Dear Client,</p>` +
+    `<p style="margin:0 0 12px">At Craftsmen Media, we take pride in the work we do and believe that strong partnerships are built through collaboration and continuous improvement. Your feedback helps us understand what we are doing well and where we can improve, enabling us to continually strengthen the quality of our work, service, and partnership with you.</p>` +
+    `<p style="margin:0 0 12px">We would appreciate a few minutes of your time to share your experience with us over the past month. Your input will enable us to better understand your needs and identify opportunities to further enhance the way we work together.</p>` +
+    `<p style="margin:0 0 12px"><a href="${esc(link)}" style="display:inline-block;background:#FFF000;color:#111827;font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none;">Please share your feedback here</a></p>` +
+    `<p style="margin:0">Best regards,<br>The Craftsmen Media Support Team</p>` +
+    `</div>`;
+
+  return { text, html };
 }
 
 async function sendClientFeedbackRequest(config, client, link) {
   const mailer = createTransport(config);
-  const company = client.name || 'Service';
+  const { text, html } = clientFeedbackRequestBody(client, link);
   const info = await mailer.sendMail({
     from: `"${BRAND_NAME}" <${config.smtpUser}>`,
     to: client.email,
-    subject: `Your feedback matters — ${company} service update`,
-    text: clientFeedbackRequestBody(client, link)
+    subject: `Client Feedback | Craftsmen Media`,
+    text,
+    html
   });
   return info;
 }
@@ -199,19 +208,33 @@ function escalationAlertContent({ client, score, month, streak, months, threshol
   ]) };
 }
 
-function noResponseClientReminderContent({ name }, month, days, link) {
-  const company = name || 'your service';
-  const subject = `Reminder: Monthly feedback for ${company} (${month})`;
-  return { subject, ...wrapAlertContent(subject, [
-    `Hi ${name},`,
+function noResponseClientReminderContent(link) {
+  const subject = 'Gentle Reminder | Client Feedback';
+  const text = [
+    `Dear Client,`,
     ``,
-    `We sent you a short feedback form ${days} day${days === 1 ? '' : 's'} ago and haven't heard back yet — your answers help us keep improving.`,
+    `Just a gentle reminder to share your feedback with us when you have a few minutes.`,
     ``,
-    `It only takes about a minute:`,
-    link,
+    `Your input is valuable to us and will help us understand your experience over the past month and identify areas where we can continue to improve our work and partnership.`,
     ``,
-    `Thanks for your time!`
-  ]) };
+    `Please share your feedback here: ${link}`,
+    ``,
+    `Thank you for your time and continued support.`,
+    ``,
+    `Best regards,`,
+    `The Craftsmen Media Support Team`
+  ].join('\n');
+
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
+    `<p style="margin:0 0 12px">Dear Client,</p>` +
+    `<p style="margin:0 0 12px">Just a gentle reminder to share your feedback with us when you have a few minutes.</p>` +
+    `<p style="margin:0 0 12px">Your input is valuable to us and will help us understand your experience over the past month and identify areas where we can continue to improve our work and partnership.</p>` +
+    `<p style="margin:0 0 12px"><a href="${esc(link)}" style="display:inline-block;background:#FFF000;color:#111827;font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none;">Please share your feedback here</a></p>` +
+    `<p style="margin:0 0 12px">Thank you for your time and continued support.</p>` +
+    `<p style="margin:0">Best regards,<br>The Craftsmen Media Support Team</p>` +
+    `</div>`;
+
+  return { subject, text, html };
 }
 
 function noResponseInternalAlertContent({ name, email }, month, days, dashboardUrl) {

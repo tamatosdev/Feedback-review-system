@@ -1070,7 +1070,7 @@ app.get('/feedback/:token', async (req, res) => {
 });
 
 // ---------- Cron: monthly send + 6-month report (Phase 2) ----------
-const MONTHLY_SEND_CRON = process.env.MONTHLY_SEND_CRON || '0 9 1 * *';
+const MONTHLY_SEND_CRON = process.env.MONTHLY_SEND_CRON || '0 9 28 * *';
 const SIX_MONTH_REPORT_CRON = process.env.SIX_MONTH_REPORT_CRON || '0 9 1 1,7 *';
 const NO_RESPONSE_CHECK_CRON = process.env.NO_RESPONSE_CHECK_CRON || '0 10 * * *';
 

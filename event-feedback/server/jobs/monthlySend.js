@@ -9,7 +9,7 @@ function currentMonth(now = new Date()) {
 }
 
 /**
- * Cron job (default: 09:00 on the 1st of every month).
+ * Cron job (default: 09:00 on the 28th of every month).
  * Emails a unique tokenized feedback-form link to every active client.
  * Idempotent per (client, month) via the feedback_requests table.
  */

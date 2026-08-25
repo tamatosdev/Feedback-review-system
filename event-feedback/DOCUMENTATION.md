@@ -102,7 +102,7 @@ public/dashboard.html ── GET /api/feedback + GET /api/stats (filters)
 ### 3.2 Automation layer (Phase 2 — implemented)
 
 ```
-Cron 1 (monthly, e.g. 1st @ 09:00)          Cron 2 (every 6 months, e.g. Jan & Jul)
+Cron 1 (monthly, e.g. 28th @ 09:00)          Cron 2 (every 6 months, e.g. Jan & Jul)
         │                                          │
         ▼                                          ▼
 SELECT * FROM clients WHERE status='active'   SELECT * FROM feedback_reports
@@ -195,9 +195,10 @@ Copy `.env.example` → `.env` and fill in. **Never commit `.env`.**
 | `PORT` | Server port | `3000` |
 | `DB_PATH` | Path to SQLite file (relative to project root) | `data/feedback.db` |
 | `APP_BASE_URL` | Base URL used to build `/feedback/<token>` links | `PUBLIC_URL` |
-| `MONTHLY_SEND_CRON` | Cron expression for the monthly form send | `0 9 1 * *` |
+| `MONTHLY_SEND_CRON` | Cron expression for the monthly form send | `0 9 28 * *` |
 | `SIX_MONTH_REPORT_CRON` | Cron expression for the 6-month report | `0 9 1 1,7 *` |
 | `CRON_SECRET` | Optional secret for external cron-trigger endpoints (`x-cron-secret` header) | *(empty → no auth check)* |
+| `ALERT_NO_RESPONSE_DAYS` | Days an unanswered monthly feedback request may age before the client gets a "Gentle Reminder" email and an internal alert to `ADMIN_EMAIL` | `5` |
 | `ADMIN_USERNAME` | Admin login username (single fixed account — no registration) | *(empty → auth disabled + startup warning)* |
 | `SUPABASE_URL` | Supabase project URL — with `SUPABASE_SERVICE_ROLE_KEY` enables the `supabase` storage driver | *(empty → driver auto-detected)* |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (storage uploads; keep secret) | *(empty → driver auto-detected)* |
@@ -521,7 +522,7 @@ Returns `{ ok, data }`:
 
 ### Logic
 
-1. Cron triggers on the configured date (default **1st of every month at 09:00**, `MONTHLY_SEND_CRON`).
+1. Cron triggers on the configured date (default **28th of every month at 09:00**, `MONTHLY_SEND_CRON`).
 2. `SELECT * FROM clients WHERE status = 'active'`.
 3. For each client:
    - Generate a unique token: `crypto.randomUUID()`.
@@ -533,8 +534,8 @@ Returns `{ ok, data }`:
 ### Cron registration (`node-cron`)
 
 ```js
-// 09:00 on the 1st of every month
-cron.schedule(process.env.MONTHLY_SEND_CRON || '0 9 1 * *', async () => {
+// 09:00 on the 28th of every month
+cron.schedule(process.env.MONTHLY_SEND_CRON || '0 9 28 * *', async () => {
   await sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl: APP_BASE_URL });
 });
 ```
@@ -775,7 +776,7 @@ The app is a normal long-running Express server **and** a Vercel serverless func
 
 ## 22. Future Improvements
 
-- **Reminder job:** resend the form to clients who haven't submitted after N days.
+- **Reminder job:** resend the form to clients who haven't submitted after `ALERT_NO_RESPONSE_DAYS` days (default **5**), sending a "Gentle Reminder | Client Feedback" email with the tokenized `/feedback/<token>` link plus an internal `ALERT: No response` email to `ADMIN_EMAIL`.
 - **Per-service-type breakdown** inside the 6-month report.
 - **Per-user admin accounts / role-based access** (currently a single fixed admin login).
 - **Client opt-out / unsubscribe** mechanism (link-level preference stored in `clients`).

@@ -11,7 +11,7 @@ const DEPARTMENTS = [
 
 const SCORE_KEYS = DEPARTMENTS.map((d) => d.key);
 
-const STATUS_LEVELS = ['healthy', 'attention', 'corrective'];
+const STATUS_LEVELS = ['healthy', 'attention'];
 
 function num(value) {
   if (value === null || value === undefined || value === '') return null;
@@ -27,8 +27,7 @@ function statusForScore(score) {
   const n = num(score);
   if (n === null) return { level: 'noData', label: 'No data', color: 'gray' };
   if (n >= 4) return { level: 'healthy', label: 'Healthy', color: 'green' };
-  if (n >= 3) return { level: 'attention', label: 'Attention Required', color: 'amber' };
-  return { level: 'corrective', label: 'Corrective Action Required', color: 'red' };
+  return { level: 'attention', label: 'Attention Required', color: 'amber' };
 }
 
 function ymOf(year, monthIndex) {
@@ -264,7 +263,7 @@ async function dashboardKpis({ from, to, client } = {}) {
     kpis: [
       ...kpis,
       { key: 'responseRate', label: 'Response Rate', percent: rate.percent, submitted: rate.submitted, total: rate.total },
-      { key: 'clientsRequiringAttention', label: 'Clients Requiring Attention', count: requiringAttention.length, clients: requiringAttention.map((r) => r.name) }
+      { key: 'clientsRequiringAttention', label: 'Clients Requiring Action', count: requiringAttention.length, clients: requiringAttention.map((r) => r.name) }
     ],
     history: { months: lastSixMonths(toYm) },
     comparisons: {

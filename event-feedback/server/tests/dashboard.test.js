@@ -92,8 +92,10 @@ test('statusForScore bands, including edge values', () => {
   assert.strictEqual(statusForScore(4.0).label, 'Healthy');
   assert.strictEqual(statusForScore(3.9).level, 'attention');
   assert.strictEqual(statusForScore(3.0).level, 'attention', 'exactly 3.0 is Attention Required');
-  assert.strictEqual(statusForScore(2.9).level, 'corrective');
-  assert.strictEqual(statusForScore(1).level, 'corrective');
+  assert.strictEqual(statusForScore(2.9).level, 'attention');
+  assert.strictEqual(statusForScore(2.5).level, 'attention', '2.5 (formerly Corrective) is now Attention Required');
+  assert.strictEqual(statusForScore(2.5).color, 'amber', '2.5 is amber, not red');
+  assert.strictEqual(statusForScore(1).level, 'attention');
   assert.strictEqual(statusForScore('3.5').level, 'attention', 'string scores are coerced');
   assert.strictEqual(statusForScore(null).level, 'noData');
   assert.strictEqual(statusForScore(undefined).level, 'noData');
@@ -126,7 +128,7 @@ test('dashboardKpis computes known expected values for Aug 2026', async () => {
   assert.strictEqual(byKey.accountManagementScore.score, 3.5);
   assert.strictEqual(byKey.strategyScore.score, 3);
   assert.strictEqual(byKey.creativeScore.score, 2.5);
-  assert.strictEqual(byKey.creativeScore.status.level, 'corrective');
+  assert.strictEqual(byKey.creativeScore.status.level, 'attention');
   assert.strictEqual(byKey.designContentScore.score, 3.5);
   assert.strictEqual(byKey.socialContentScore.score, 4);
   assert.strictEqual(byKey.socialContentScore.status.level, 'healthy');
@@ -183,8 +185,8 @@ test('dashboardDepartment client-wise rows, top/bottom and status filter', async
   assert.strictEqual(a.avg, 2, 'client-wise list is scoped to the selected range (Aug only)');
   assert.strictEqual(a.count, 1);
   assert.strictEqual(a.latest, 2);
-  assert.strictEqual(a.clientStatus.level, 'corrective');
-  assert.strictEqual(a.avgStatus.level, 'corrective');
+  assert.strictEqual(a.clientStatus.level, 'attention');
+  assert.strictEqual(a.avgStatus.level, 'attention');
   assert.strictEqual(b.avg, 4);
   assert.strictEqual(b.latest, 4);
   assert.strictEqual(b.clientStatus.level, 'healthy');
@@ -193,9 +195,9 @@ test('dashboardDepartment client-wise rows, top/bottom and status filter', async
 
   const healthyOnly = await dashboardDepartment('Agency Leadership', { from: '2026-08-01', to: '2026-08-31', status: 'healthy' });
   assert.deepStrictEqual(healthyOnly.clients.map((c) => c.name), ['Beta B']);
-  const correctiveOnly = await dashboardDepartment('Agency Leadership', { from: '2026-08-01', to: '2026-08-31', status: 'corrective' });
-  assert.deepStrictEqual(correctiveOnly.clients.map((c) => c.name), ['Acme A']);
-  assert.deepStrictEqual(correctiveOnly.topClients.map((c) => c.name), ['Acme A']);
+  const attentionOnly = await dashboardDepartment('Agency Leadership', { from: '2026-08-01', to: '2026-08-31', status: 'attention' });
+  assert.deepStrictEqual(attentionOnly.clients.map((c) => c.name), ['Acme A']);
+  assert.deepStrictEqual(attentionOnly.topClients.map((c) => c.name), ['Acme A']);
 });
 
 test('dashboardDepartment Creative: department average vs agency average', async () => {
@@ -203,7 +205,7 @@ test('dashboardDepartment Creative: department average vs agency average', async
   assert.strictEqual(d.departmentAverage.score, 2.5);
   assert.strictEqual(d.agencyAverage.score, 3);
   assert.strictEqual(d.currentMonth.score, 2.5);
-  assert.strictEqual(d.currentMonth.status.level, 'corrective');
+  assert.strictEqual(d.currentMonth.status.level, 'attention');
   const a = d.clients.find((c) => c.name === 'Acme A');
   assert.strictEqual(a.avg, 3);
   assert.strictEqual(a.avgStatus.level, 'attention');
