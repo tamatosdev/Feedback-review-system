@@ -454,7 +454,13 @@ async function queryFeedback({ from, to, sentiment, serviceType, eventName } = {
 }
 
 async function getFeedbackReport(submissionId) {
-  const row = await getRow('SELECT * FROM feedback_reports WHERE submissionId = ?', [String(submissionId || '')]);
+  const row = await getRow(
+    `SELECT fr.*, c.email AS clientEmail, c.name AS clientName
+     FROM feedback_reports fr
+     LEFT JOIN clients c ON c.id = fr.client_id
+     WHERE fr.submissionId = ?`,
+    [String(submissionId || '')]
+  );
   return row ? rowToRecord(row) : null;
 }
 

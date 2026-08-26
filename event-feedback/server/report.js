@@ -88,7 +88,9 @@ function departmentScoresTable(record) {
 }
 
 function reportHTML(record, logoPath) {
-  const hasEmail = record.attendeeEmail && record.hasValidEmail !== false;
+  const clientEmail = record.clientEmail ? String(record.clientEmail).trim() : '';
+  const attendeeEmail = (record.attendeeEmail && record.hasValidEmail !== false) ? record.attendeeEmail : '';
+  const shownEmail = clientEmail || attendeeEmail;
   const logo = logoPath
     ? `<img src="${logoPath}" alt="Logo" width="64" style="vertical-align:middle;margin-right:12px"/>`
     : '';
@@ -124,7 +126,7 @@ function reportHTML(record, logoPath) {
         <h2 style="color:${ACCENT};font-size:18px;margin:30px 0 10px;letter-spacing:.5px">CLIENT INFORMATION</h2>
         <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden">
           ${infoRow('Name', record.attendeeName)}
-          ${infoRow('Email Address', hasEmail ? record.attendeeEmail : 'Not provided')}
+          ${infoRow('Email Address', shownEmail || 'Not provided')}
           ${infoRow('Company', record.companyName || 'Not provided')}
         </table>
 

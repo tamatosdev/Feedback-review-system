@@ -189,3 +189,24 @@ test('on-demand report for a tokenized submission shows the "General" fallback s
     server.close();
   }
 });
+
+test('report shows the client email for tokenized submissions, falls back to attendee email otherwise', async () => {
+  const client = await insertClient({ name: 'Mail Co', email: 'mail@co.com' });
+
+  // tokenized: stored row is linked to the client -> client email should appear
+  const row = validReportRow({ client_id: client.id, attendeeEmail: 'respondent@x.com', hasValidEmail: 1 });
+  await insertFeedback(row);
+  const rec = await getFeedbackReport(row.submissionId);
+  assert.strictEqual(rec.clientEmail, 'mail@co.com', 'client email is joined from the clients table');
+  const html = reportHTML(rec);
+  assert.strictEqual(fieldValue(html, 'Email Address'), 'mail@co.com', 'tokenized report shows the client email');
+  assert.ok(!html.includes('Not provided'), 'client email is present, not "Not provided"');
+
+  // untokenized / no client -> falls back to the attendee (respondent) email
+  const row2 = validReportRow({ submissionId: 'FB-NOCLIENT', client_id: null, attendeeEmail: 'anon@x.com', hasValidEmail: 1 });
+  await insertFeedback(row2);
+  const rec2 = await getFeedbackReport(row2.submissionId);
+  assert.ok(!rec2.clientEmail, 'no client -> no client email joined');
+  const html2 = reportHTML(rec2);
+  assert.strictEqual(fieldValue(html2, 'Email Address'), 'anon@x.com', 'untokenized report falls back to attendee email');
+});

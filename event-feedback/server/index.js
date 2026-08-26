@@ -299,6 +299,13 @@ async function processSubmissionBackground(initialRecord, client) {
     const { analysis } = await analyzeFeedback(initialRecord, { apiKey: geminiApiKey });
     record = { ...initialRecord, ...analysis, sentimentColor: sentimentColor(analysis.sentiment) };
 
+    // Surface the client's own email (entered when the client was added) so the
+    // generated HTML/PDF report shows it under CLIENT INFORMATION.
+    if (client) {
+      record.clientEmail = client.email ? String(client.email).trim() : '';
+      record.clientName = client.name ? String(client.name).trim() : '';
+    }
+
     const html = reportHTML(record, '/assets/logo.png');
     await saveHtml(html, `${record.submissionId}.html`);
 
