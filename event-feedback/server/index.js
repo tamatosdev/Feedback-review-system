@@ -696,6 +696,20 @@ app.patch('/api/clients/:id', async (req, res) => {
     const id = Number(req.params.id);
     const body = req.body || {};
     const fields = {};
+    if (body.name !== undefined) {
+      const name = String(body.name).trim();
+      if (!name) {
+        return res.status(400).json({ ok: false, error: 'Client name is required.' });
+      }
+      fields.name = name;
+    }
+    if (body.email !== undefined) {
+      const email = String(body.email).trim();
+      if (!email || !CLIENT_EMAIL_RE.test(email)) {
+        return res.status(400).json({ ok: false, error: 'A valid email is required.' });
+      }
+      fields.email = email;
+    }
     if (body.status !== undefined) {
       if (!['active', 'inactive'].includes(body.status)) {
         return res.status(400).json({ ok: false, error: "Status must be 'active' or 'inactive'." });
@@ -710,7 +724,7 @@ app.patch('/api/clients/:id', async (req, res) => {
       fields.accountManagerEmail = amEmail;
     }
     if (Object.keys(fields).length === 0) {
-      return res.status(400).json({ ok: false, error: 'Nothing to update — send "status" and/or "accountManagerEmail".' });
+      return res.status(400).json({ ok: false, error: 'Nothing to update — send name, email, status and/or accountManagerEmail.' });
     }
     const client = await updateClient(id, fields);
     if (!client) {

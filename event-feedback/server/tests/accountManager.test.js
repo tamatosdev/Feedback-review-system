@@ -118,6 +118,63 @@ test('POST /api/clients + GET stores Account Manager Email; PATCH updates it', a
   }
 });
 
+test('PATCH /api/clients/:id updates name and email, validates them, and leaves other clients untouched', async () => {
+  const server = app.listen(0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const created = await (await fetch(`${base}/api/clients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Edit Me', email: 'edit@client.com', status: 'active' })
+    })).json();
+    assert.strictEqual(created.ok, true);
+
+    // a second client that must NOT change
+    const other = await (await fetch(`${base}/api/clients`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Other Co', email: 'other@client.com' })
+    })).json();
+    assert.strictEqual(other.ok, true);
+
+    // update name + email
+    const patched = await (await fetch(`${base}/api/clients/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Renamed Client', email: 'renamed@client.com' })
+    })).json();
+    assert.strictEqual(patched.ok, true);
+    assert.strictEqual(patched.data.name, 'Renamed Client');
+    assert.strictEqual(patched.data.email, 'renamed@client.com');
+    // unchanged fields persist
+    assert.strictEqual(patched.data.status, 'active');
+
+    // blank name rejected
+    const emptyName = await fetch(`${base}/api/clients/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: '   ' })
+    });
+    assert.strictEqual(emptyName.status, 400, 'blank name rejected');
+
+    // invalid email rejected
+    const badEmail = await fetch(`${base}/api/clients/${created.data.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'nope' })
+    });
+    assert.strictEqual(badEmail.status, 400, 'invalid email rejected');
+
+    // other client untouched (by email + name)
+    const after = await (await fetch(`${base}/api/clients`)).json();
+    const otherRow = after.data.find((c) => c.id === other.data.id);
+    assert.strictEqual(otherRow.name, 'Other Co', 'other client name unchanged');
+    assert.strictEqual(otherRow.email, 'other@client.com', 'other client email unchanged');
+  } finally {
+    stopServer(server);
+  }
+});
+
 test('POST /api/clients/sync (push) maps AM columns and skips invalid manager email', async () => {
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;

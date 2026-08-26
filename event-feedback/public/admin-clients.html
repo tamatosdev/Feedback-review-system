@@ -148,7 +148,7 @@
       $('rowCount').textContent = list.length + ' client(s)';
       $('emptyState').classList.toggle('hidden', list.length > 0);
       $('tableBody').innerHTML = list.map((c) => {
-        if (c.id === editingId) {
+        if (String(c.id) === String(editingId)) {
           return `
         <tr class="hover:bg-gray-50/60 transition">
           <td class="px-5 py-4"><input data-edit="name" value="${esc(c.name)}" class="w-full rounded-lg border border-gray-200 px-2 py-1 text-sm" /></td>
@@ -263,6 +263,14 @@
       row.querySelectorAll('[data-edit]').forEach((el) => {
         payload[el.getAttribute('data-edit')] = el.value.trim();
       });
+      if (!payload.name) {
+        showMessage('Client name is required.', true);
+        return;
+      }
+      if (!EMAIL_RE.test(payload.email)) {
+        showMessage('A valid email is required.', true);
+        return;
+      }
       if (payload.accountManagerEmail && !EMAIL_RE.test(payload.accountManagerEmail)) {
         showMessage('Account Manager Email must be a valid email address.', true);
         return;
