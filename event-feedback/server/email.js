@@ -3,6 +3,41 @@ const { DEPARTMENT_SCORES, scoreText, esc, safeText } = require('./report');
 
 const BRAND_NAME = 'Craftsmen Media';
 
+// Parse a comma-separated list of addresses (LEADERSHIP_EMAILS). Defensive:
+// trims whitespace, drops empty entries (e.g. trailing comma), and returns []
+// when unset so callers can't crash.
+function parseLeadershipEmails(str) {
+  if (!str) return [];
+  return String(str)
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// Build the ADDITIONAL recipients (beyond ADMIN_EMAIL) for the main report
+// email. When the overall score is below the low-score threshold, the
+// leadership addresses are included. Account-manager and leadership addresses
+// are de-duplicated (case-insensitive) against each other here; the final
+// merge with ADMIN_EMAIL is de-duplicated again inside sendFeedbackEmail.
+function reportExtraRecipients({ accountManagerEmail, leadershipEmails = [], lowScore = false } = {}) {
+  const list = [];
+  if (accountManagerEmail) list.push(String(accountManagerEmail).trim());
+  if (lowScore && Array.isArray(leadershipEmails)) {
+    for (const e of leadershipEmails) {
+      if (e) list.push(String(e).trim());
+    }
+  }
+  const seen = new Set();
+  const out = [];
+  for (const e of list) {
+    const key = e.toLowerCase();
+    if (!e || seen.has(key)) continue;
+    seen.add(key);
+    out.push(e);
+  }
+  return out;
+}
+
 function createTransport(config) {
   const useSecure = config.smtpSecure !== false;
   return nodemailer.createTransport({
@@ -71,7 +106,16 @@ function combinedEmailBody(meta, pdfUrl, count) {
 async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl, extraRecipients) {
   // Always notify ADMIN_EMAIL; additionally copy any extra recipients (e.g. the
   // client's Account Manager) so they receive the same notification content.
-  const to = [config.adminEmail, ...(extraRecipients || []).filter(Boolean)];
+  const raw = [config.adminEmail, ...(extraRecipients || []).filter(Boolean)];
+  const seen = new Set();
+  const to = [];
+  for (const e of raw) {
+    const addr = String(e).trim();
+    const key = addr.toLowerCase();
+    if (!addr || seen.has(key)) continue;
+    seen.add(key);
+    to.push(addr);
+  }
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
@@ -264,6 +308,8 @@ async function sendAlertEmail(config, { to, subject, text, html }) {
 module.exports = {
   sendFeedbackEmail,
   sendCombinedEmail,
+  parseLeadershipEmails,
+  reportExtraRecipients,
   sendClientFeedbackRequest,
   sendNoFeedbackEmail,
   clientFeedbackRequestBody,

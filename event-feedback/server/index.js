@@ -7,7 +7,7 @@ const { cleanData } = require('./cleanData');
 const { analyzeFeedback, analyzeCombined, sentimentColor, fallbackAnalysis } = require('./gemini');
 const { reportHTML, combinedHTML, esc } = require('./report');
 const { buildPdf, buildCombinedPdf } = require('./pdf');
-const { sendFeedbackEmail, sendCombinedEmail } = require('./email');
+const { sendFeedbackEmail, sendCombinedEmail, parseLeadershipEmails, reportExtraRecipients } = require('./email');
 const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus,   updateClient, upsertClientByEmail, deleteClient, clientFeedbackReportCount, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
 const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
@@ -28,8 +28,10 @@ const smtpConfig = {
   smtpUser: process.env.SMTP_USER || 'tahir@puredesigners.com',
   smtpPass: process.env.SMTP_PASS || '',
   adminEmail: process.env.ADMIN_EMAIL || 'tahir@puredesigners.com',
-  smtpSecure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE.toLowerCase() === 'true' : true
+  smtpSecure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE.toLowerCase() === 'true' : true,
+  leadershipEmails: parseLeadershipEmails(process.env.LEADERSHIP_EMAILS)
 };
+const LOW_SCORE_THRESHOLD = Number(process.env.ALERT_LOW_SCORE_THRESHOLD || 3.0);
 const geminiApiKey = process.env.GEMINI_API_KEY || '';
 
 // ---------- Background processing (response-first submissions) ----------
@@ -309,10 +311,16 @@ async function processSubmissionBackground(initialRecord, client) {
       try {
         // Copy the client's Account Manager (if configured) on the same
         // notification email so they hear about their client's feedback.
-        const extraRecipients = [];
-        if (client && client.accountManagerEmail) {
-          extraRecipients.push(String(client.accountManagerEmail).trim());
-        }
+        // When the overall score (agency_leadership_score) is below the
+        // low-score threshold, also CC the leadership addresses — same full
+        // report email with the PDF, not the separate short alert.
+        const score = Number(record.agencyLeadershipScore);
+        const lowScore = Number.isFinite(score) && score < LOW_SCORE_THRESHOLD;
+        const extraRecipients = reportExtraRecipients({
+          accountManagerEmail: client && client.accountManagerEmail,
+          leadershipEmails: smtpConfig.leadershipEmails,
+          lowScore
+        });
         await sendFeedbackEmail(smtpConfig, record, pdfBuffer, record.pdfUrl, extraRecipients);
         record.emailSent = true;
       } catch (err) {

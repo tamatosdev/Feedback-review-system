@@ -191,6 +191,7 @@ Copy `.env.example` → `.env` and fill in. **Never commit `.env`.**
 | `SMTP_USER` | Mailbox address (sender) | `tahir@puredesigners.com` |
 | `SMTP_PASS` | Mailbox password | *(empty → emails skipped)* |
 | `ADMIN_EMAIL` | Recipient of every report | `tahir@puredesigners.com` |
+| `LEADERSHIP_EMAILS` | Comma-separated leadership addresses that also receive the **full report email (with PDF)** when a submission's overall score (`agency_leadership_score`) is below `ALERT_LOW_SCORE_THRESHOLD`; blank = none, entries trimmed, empty entries ignored, de-duplicated against `ADMIN_EMAIL`/`account_manager_email` | *(empty)* |
 | `PUBLIC_URL` | Public base URL for links in emails/PDFs | `http://localhost:3000` |
 | `PORT` | Server port | `3000` |
 | `DB_PATH` | Path to SQLite file (relative to project root) | `data/feedback.db` |
