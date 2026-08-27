@@ -159,8 +159,8 @@ function clientFeedbackRequestBody(client, link) {
     ``,
     `Please share your feedback here: ${link}`,
     ``,
-    `Best regards,`,
-    `Craftsmen Media`
+    `Regards,`,
+    `Team Craftsmen Media`
   ].join('\n');
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
@@ -168,7 +168,7 @@ function clientFeedbackRequestBody(client, link) {
     `<p style="margin:0 0 12px">At Craftsmen Media, we take pride in the work we do and believe that strong partnerships are built through collaboration and continuous improvement. Your feedback helps us understand what we are doing well and where we can improve, enabling us to continually strengthen the quality of our work, service, and partnership with you.</p>` +
     `<p style="margin:0 0 12px">We would appreciate a few minutes of your time to share your experience with us over the past month. Your input will enable us to better understand your needs and identify opportunities to further enhance the way we work together.</p>` +
     `<p style="margin:0 0 12px"><a href="${esc(link)}" style="display:inline-block;background:#FFF000;color:#111827;font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none;">Please share your feedback here</a></p>` +
-    `<p style="margin:0">Best regards,<br>Craftsmen Media</p>` +
+    `<p style="margin:0">Regards,<br>Team Craftsmen Media</p>` +
     `</div>`;
 
   return { text, html };

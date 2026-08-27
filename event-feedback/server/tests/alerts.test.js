@@ -372,12 +372,14 @@ test('client feedback request email uses client name greeting and new sign-off',
   const { text, html } = email.clientFeedbackRequestBody({ name: 'Jane Doe' }, 'http://app.test/feedback/abc');
   assert.ok(text.includes('Hi Jane Doe,'), 'plain text greeting uses client name');
   assert.ok(!text.includes('Dear Client'), 'old greeting removed');
-  assert.ok(text.includes('Best regards,'), 'sign-off label present');
-  assert.ok(text.includes('Craftsmen Media'), 'new sign-off name present');
+  assert.ok(text.includes('Regards,'), 'sign-off label present');
+  assert.ok(text.includes('Team Craftsmen Media'), 'new sign-off name present');
+  assert.ok(!text.includes('Best regards,'), 'old sign-off label removed');
   assert.ok(!text.includes('The Craftsmen Media Support Team'), 'old sign-off removed');
   assert.ok(html.includes('Hi Jane Doe,'), 'html greeting uses client name');
   assert.ok(!html.includes('Dear Client'), 'html old greeting removed');
-  assert.ok(html.includes('Craftsmen Media'), 'html new sign-off name present');
+  assert.ok(html.includes('Team Craftsmen Media'), 'html new sign-off name present');
+  assert.ok(!html.includes('Best regards,'), 'html old sign-off label removed');
   assert.ok(!html.includes('The Craftsmen Media Support Team'), 'html old sign-off removed');
 });
 
