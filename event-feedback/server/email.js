@@ -143,9 +143,15 @@ async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
   return info;
 }
 
+function clientGreeting(client) {
+  const name = client && client.name ? String(client.name).trim() : '';
+  return name ? `Hi ${name},` : `Hi there,`;
+}
+
 function clientFeedbackRequestBody(client, link) {
+  const greeting = clientGreeting(client);
   const text = [
-    `Dear Client,`,
+    greeting,
     ``,
     `At Craftsmen Media, we take pride in the work we do and believe that strong partnerships are built through collaboration and continuous improvement. Your feedback helps us understand what we are doing well and where we can improve, enabling us to continually strengthen the quality of our work, service, and partnership with you.`,
     ``,
@@ -154,15 +160,15 @@ function clientFeedbackRequestBody(client, link) {
     `Please share your feedback here: ${link}`,
     ``,
     `Best regards,`,
-    `The Craftsmen Media Support Team`
+    `Craftsmen Media`
   ].join('\n');
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
-    `<p style="margin:0 0 12px">Dear Client,</p>` +
+    `<p style="margin:0 0 12px">${esc(greeting)}</p>` +
     `<p style="margin:0 0 12px">At Craftsmen Media, we take pride in the work we do and believe that strong partnerships are built through collaboration and continuous improvement. Your feedback helps us understand what we are doing well and where we can improve, enabling us to continually strengthen the quality of our work, service, and partnership with you.</p>` +
     `<p style="margin:0 0 12px">We would appreciate a few minutes of your time to share your experience with us over the past month. Your input will enable us to better understand your needs and identify opportunities to further enhance the way we work together.</p>` +
     `<p style="margin:0 0 12px"><a href="${esc(link)}" style="display:inline-block;background:#FFF000;color:#111827;font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none;">Please share your feedback here</a></p>` +
-    `<p style="margin:0">Best regards,<br>The Craftsmen Media Support Team</p>` +
+    `<p style="margin:0">Best regards,<br>Craftsmen Media</p>` +
     `</div>`;
 
   return { text, html };
@@ -253,10 +259,11 @@ function escalationAlertContent({ client, score, month, streak, months, threshol
   ]) };
 }
 
-function noResponseClientReminderContent(link) {
+function noResponseClientReminderContent(client, link) {
   const subject = 'Gentle Reminder | Client Feedback';
+  const greeting = clientGreeting(client);
   const text = [
-    `Dear Client,`,
+    greeting,
     ``,
     `Just a gentle reminder to share your feedback with us when you have a few minutes.`,
     ``,
@@ -267,16 +274,16 @@ function noResponseClientReminderContent(link) {
     `Thank you for your time and continued support.`,
     ``,
     `Best regards,`,
-    `The Craftsmen Media Support Team`
+    `Craftsmen Media`
   ].join('\n');
 
   const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#111827">` +
-    `<p style="margin:0 0 12px">Dear Client,</p>` +
+    `<p style="margin:0 0 12px">${esc(greeting)}</p>` +
     `<p style="margin:0 0 12px">Just a gentle reminder to share your feedback with us when you have a few minutes.</p>` +
     `<p style="margin:0 0 12px">Your input is valuable to us and will help us understand your experience over the past month and identify areas where we can continue to improve our work and partnership.</p>` +
     `<p style="margin:0 0 12px"><a href="${esc(link)}" style="display:inline-block;background:#FFF000;color:#111827;font-weight:700;padding:10px 20px;border-radius:10px;text-decoration:none;">Please share your feedback here</a></p>` +
     `<p style="margin:0 0 12px">Thank you for your time and continued support.</p>` +
-    `<p style="margin:0">Best regards,<br>The Craftsmen Media Support Team</p>` +
+    `<p style="margin:0">Best regards,<br>Craftsmen Media</p>` +
     `</div>`;
 
   return { subject, text, html };

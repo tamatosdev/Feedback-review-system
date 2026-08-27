@@ -1004,7 +1004,7 @@ function feedbackFormPage(client, request, logoPath) {
         </svg>
       </div>
       <h2 class="mt-6 text-2xl font-extrabold tracking-tight">Thank you for your feedback!</h2>
-      <p class="mt-2 text-gray-500 text-sm">Your response has been recorded and sent to our team.</p>
+      <p class="mt-2 text-gray-500 text-sm">Your response has been received and sent to our team for evaluation.</p>
     </div>
   </main>
 

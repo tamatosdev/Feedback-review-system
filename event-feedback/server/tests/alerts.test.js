@@ -280,9 +280,16 @@ test('no-response check: old request -> client reminder + internal alert, once o
   assert.strictEqual(reminder.subject, 'Gentle Reminder | Client Feedback', 'updated reminder subject');
   assert.ok(reminder.text.includes(`http://app.test/feedback/${oldReq.token}`), 'reminder re-includes the feedback link');
   assert.ok(reminder.text.includes('gentle reminder'), 'updated reminder body copy (plain text)');
-  assert.ok(reminder.text.includes('The Craftsmen Media Support Team'), 'new sign-off present');
+  assert.ok(reminder.text.includes('Hi Silent Client,'), 'reminder uses client name in greeting');
+  assert.ok(reminder.text.includes('Best regards,'), 'reminder uses new sign-off label');
+  assert.ok(reminder.text.includes('Craftsmen Media'), 'reminder uses new sign-off name');
+  assert.ok(!reminder.text.includes('The Craftsmen Media Support Team'), 'old sign-off removed');
+  assert.ok(!reminder.text.includes('Dear Client'), 'old greeting removed');
   assert.ok(reminder.html.includes(`http://app.test/feedback/${oldReq.token}`), 'html alternative includes the feedback link');
-  assert.ok(reminder.html.includes('Craftsmen Media Support Team'), 'html alternative present');
+  assert.ok(reminder.html.includes('Hi Silent Client,'), 'html reminder uses client name in greeting');
+  assert.ok(reminder.html.includes('Craftsmen Media'), 'html alternative uses new sign-off name');
+  assert.ok(!reminder.html.includes('The Craftsmen Media Support Team'), 'html old sign-off removed');
+  assert.ok(!reminder.html.includes('Dear Client'), 'html old greeting removed');
 
   const internal = alertMails().find((m) => m.subject.startsWith('ALERT: No response') && m.to === 'admin@alerts.test');
   assert.ok(internal, 'internal no-response alert to ADMIN_EMAIL');
@@ -357,4 +364,46 @@ test('POST /api/cron/no-response-check endpoint runs the check', async () => {
   } finally {
     stopServer(server);
   }
+});
+
+const email = require('../email');
+
+test('client feedback request email uses client name greeting and new sign-off', () => {
+  const { text, html } = email.clientFeedbackRequestBody({ name: 'Jane Doe' }, 'http://app.test/feedback/abc');
+  assert.ok(text.includes('Hi Jane Doe,'), 'plain text greeting uses client name');
+  assert.ok(!text.includes('Dear Client'), 'old greeting removed');
+  assert.ok(text.includes('Best regards,'), 'sign-off label present');
+  assert.ok(text.includes('Craftsmen Media'), 'new sign-off name present');
+  assert.ok(!text.includes('The Craftsmen Media Support Team'), 'old sign-off removed');
+  assert.ok(html.includes('Hi Jane Doe,'), 'html greeting uses client name');
+  assert.ok(!html.includes('Dear Client'), 'html old greeting removed');
+  assert.ok(html.includes('Craftsmen Media'), 'html new sign-off name present');
+  assert.ok(!html.includes('The Craftsmen Media Support Team'), 'html old sign-off removed');
+});
+
+test('client feedback request email falls back on blank name', () => {
+  const { text, html } = email.clientFeedbackRequestBody({ name: '' }, 'http://app.test/feedback/abc');
+  assert.ok(text.includes('Hi there,'), 'blank name falls back to Hi there,');
+  assert.ok(!text.includes('Hi ,'), 'no empty-name rendering');
+  assert.ok(html.includes('Hi there,'), 'html blank name falls back to Hi there,');
+});
+
+test('no-response reminder email uses client name greeting and new sign-off', () => {
+  const { text, html } = email.noResponseClientReminderContent({ name: 'Jane Doe' }, 'http://app.test/feedback/abc');
+  assert.ok(text.includes('Hi Jane Doe,'), 'plain text greeting uses client name');
+  assert.ok(!text.includes('Dear Client'), 'old greeting removed');
+  assert.ok(text.includes('Best regards,'), 'sign-off label present');
+  assert.ok(text.includes('Craftsmen Media'), 'new sign-off name present');
+  assert.ok(!text.includes('The Craftsmen Media Support Team'), 'old sign-off removed');
+  assert.ok(html.includes('Hi Jane Doe,'), 'html greeting uses client name');
+  assert.ok(!html.includes('Dear Client'), 'html old greeting removed');
+  assert.ok(html.includes('Craftsmen Media'), 'html new sign-off name present');
+  assert.ok(!html.includes('The Craftsmen Media Support Team'), 'html old sign-off removed');
+});
+
+test('no-response reminder email falls back on blank name', () => {
+  const { text, html } = email.noResponseClientReminderContent({ name: '' }, 'http://app.test/feedback/abc');
+  assert.ok(text.includes('Hi there,'), 'blank name falls back to Hi there,');
+  assert.ok(!text.includes('Hi ,'), 'no empty-name rendering');
+  assert.ok(html.includes('Hi there,'), 'html blank name falls back to Hi there,');
 });

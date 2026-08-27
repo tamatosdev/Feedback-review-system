@@ -216,6 +216,7 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
         await email.sendAlertEmail(smtpConfig, {
           to: r.email,
           ...email.noResponseClientReminderContent(
+            { name: r.name },
             `${base}/feedback/${r.token}`
           )
         });
