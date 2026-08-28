@@ -124,7 +124,7 @@ test('low score submission fires one leadership alert; dedup blocks repeats', as
     const mails = alertMails();
     const low = mails.find((m) => m.subject.startsWith('ALERT: Low overall score'));
     assert.ok(low, 'low-score alert email sent');
-    assert.strictEqual(low.to, 'admin@alerts.test', 'leadership recipient defaults to ADMIN_EMAIL when ALERT_EMAIL is unset');
+    assert.deepStrictEqual(low.to, ['admin@alerts.test'], 'leadership recipient defaults to ADMIN_EMAIL when ALERT_EMAIL is unset');
     assert.ok(low.subject.includes('Low Client') && low.subject.includes('2/5'));
     assert.ok(low.text.includes('2/5') && low.text.includes('2026-06'));
     assert.ok(low.text.includes(`dashboard.html?client=${client.id}`), 'dashboard link present');
@@ -291,7 +291,7 @@ test('no-response check: old request -> client reminder + internal alert, once o
   assert.ok(!reminder.html.includes('The Craftsmen Media Support Team'), 'html old sign-off removed');
   assert.ok(!reminder.html.includes('Dear Client'), 'html old greeting removed');
 
-  const internal = alertMails().find((m) => m.subject.startsWith('ALERT: No response') && m.to === 'admin@alerts.test');
+  const internal = alertMails().find((m) => m.subject.startsWith('ALERT: No response') && m.to.includes('admin@alerts.test'));
   assert.ok(internal, 'internal no-response alert to ADMIN_EMAIL');
   assert.ok(internal.text.includes('Silent Client'));
   assert.ok(internal.text.includes(`dashboard.html?client=${oldClient.id}`));
