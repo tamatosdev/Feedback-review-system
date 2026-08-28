@@ -1104,12 +1104,13 @@ const MONTHLY_SEND_CRON = process.env.MONTHLY_SEND_CRON || '0 9 28 * *';
 const SIX_MONTH_REPORT_CRON = process.env.SIX_MONTH_REPORT_CRON || '0 9 1 1,7 *';
 const NO_RESPONSE_CHECK_CRON = process.env.NO_RESPONSE_CHECK_CRON || '0 10 * * *';
 
-function runMonthlySend() {
+function runMonthlySend(offset = 0) {
   return sendMonthlyFeedbackForms({
     smtpConfig,
     appBaseUrl: APP_BASE_URL,
     cronSecret: CRON_SECRET,
-    selfUrl: `${APP_BASE_URL}/api/cron/monthly-send`
+    selfUrl: `${APP_BASE_URL}/api/cron/monthly-send`,
+    offset
   });
 }
 
@@ -1142,10 +1143,12 @@ function requireCronSecret(req, res, next) {
 
 app.post('/api/cron/monthly-send', requireCronSecret, async (req, res) => {
   // Respond immediately; the send loop runs in the background (and chains
-  // across fresh invocations if the client list is large) so the request never
-  // exceeds Vercel's function duration limit.
-  res.status(202).json({ ok: true, processing: true, note: 'Sending feedback requests in the background; rows appear as each email is sent.' });
-  runInBackground(() => runMonthlySend())
+  // across fresh invocations until the whole client list is covered) so the
+  // request never exceeds Vercel's function duration limit. `offset` (from the
+  // query string) advances the batches across invocations.
+  const offset = Number(req.query.offset) || 0;
+  res.status(202).json({ ok: true, processing: true, offset, note: 'Sending feedback requests in the background; rows appear as each email is sent.' });
+  runInBackground(() => runMonthlySend(offset))
     .catch((err) => console.error('[Cron] monthly send failed:', err));
 });
 

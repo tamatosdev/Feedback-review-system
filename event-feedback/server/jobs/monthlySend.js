@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { listActiveClients, insertFeedbackRequest, findFeedbackRequestByClientMonth, countActiveClientsWithoutRequest } = require('../db');
+const { listActiveClients, insertFeedbackRequest, findFeedbackRequestByClientMonth } = require('../db');
 const { sendClientFeedbackRequest } = require('../email');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -19,12 +19,13 @@ function currentMonth(now = new Date()) {
  * retry will attempt it again instead of silently skipping it.
  *
  * To stay within Vercel's function duration limit (Hobby = 60s max), clients
- * are processed in batches. When clients remain after a batch, the next batch
- * is triggered in a fresh invocation via a self-call (chaining). The HTTP
- * response is returned immediately and the work runs in the background, so the
- * request never hits FUNCTION_INVOCATION_TIMEOUT.
+ * are processed in ordered batches. The `offset` (passed via the self-call
+ * query string) advances through the full client list in a single pass; when
+ * clients remain, the next batch is triggered in a fresh invocation via a
+ * self-call (chaining). The HTTP response is returned immediately and the work
+ * runs in the background, so the request never hits FUNCTION_INVOCATION_TIMEOUT.
  */
-async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, selfUrl, batchSize = MONTHLY_BATCH_SIZE } = {}) {
+async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, selfUrl, batchSize = MONTHLY_BATCH_SIZE, offset = 0 } = {}) {
   const month = currentMonth();
   const base = String(appBaseUrl || 'http://localhost:3000').replace(/\/$/, '');
   const clients = await listActiveClients();
@@ -34,8 +35,8 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
   let failed = 0;
   let processed = 0;
 
-  for (const client of clients) {
-    if (processed >= batchSize) break;
+  const slice = clients.slice(offset, offset + batchSize);
+  for (const client of slice) {
     processed++;
 
     if (!client.email || !EMAIL_RE.test(client.email)) {
@@ -45,8 +46,8 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
     }
 
     // Idempotency pre-check: if a row already exists, the email was sent in a
-    // prior (successful) run — skip. This is safe because rows are only ever
-    // written after a successful send (see below).
+    // prior (successful) run — skip. Safe because rows are only ever written
+    // after a successful send (see below).
     const existing = await findFeedbackRequestByClientMonth(client.id, month);
     if (existing) {
       skipped++;
@@ -69,23 +70,23 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
     }
   }
 
-  const remaining = await countActiveClientsWithoutRequest(month);
-  const moreRemaining = remaining > 0;
+  const nextOffset = offset + processed;
+  const moreRemaining = nextOffset < clients.length;
 
   // Chain to a fresh invocation so we never exceed the function duration limit,
-  // regardless of how many clients there are. Only chain when we made progress
-  // (sent > 0) to avoid an infinite loop on permanently-failing recipients.
-  if (moreRemaining && sent > 0 && selfUrl && cronSecret) {
-    console.log(`[MonthlySend] ${remaining} client(s) remain; chaining next batch.`);
-    fetch(selfUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-cron-secret': cronSecret },
-      body: '{}'
-    }).catch((e) => console.error('[MonthlySend] chain fetch failed:', e.message));
+  // regardless of how many clients there are. Single pass (offset advances to
+  // the end of the list) so permanently-failing recipients are attempted once
+  // and the job terminates instead of looping forever.
+  if (moreRemaining && selfUrl && cronSecret) {
+    const sep = selfUrl.includes('?') ? '&' : '?';
+    const nextUrl = `${selfUrl}${sep}offset=${nextOffset}`;
+    console.log(`[MonthlySend] ${clients.length - nextOffset} client(s) remain; chaining next batch (offset ${nextOffset}).`);
+    fetch(nextUrl, { method: 'POST', headers: { 'x-cron-secret': cronSecret } })
+      .catch((e) => console.error('[MonthlySend] chain fetch failed:', e.message));
   }
 
-  const summary = { month, sent, skipped, failed, processed, moreRemaining, remaining };
-  console.log(`[MonthlySend] batch done for ${month}: ${sent} sent, ${skipped} skipped, ${failed} failed, remaining ${remaining}`);
+  const summary = { month, sent, skipped, failed, processed, offset, nextOffset, moreRemaining };
+  console.log(`[MonthlySend] batch done for ${month}: offset ${offset}, ${sent} sent, ${skipped} skipped, ${failed} failed, nextOffset ${nextOffset}`);
   return summary;
 }
 
