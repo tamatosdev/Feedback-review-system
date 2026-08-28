@@ -1105,8 +1105,12 @@ const SIX_MONTH_REPORT_CRON = process.env.SIX_MONTH_REPORT_CRON || '0 9 1 1,7 *'
 const NO_RESPONSE_CHECK_CRON = process.env.NO_RESPONSE_CHECK_CRON || '0 10 * * *';
 
 function runMonthlySend() {
-  return sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl: APP_BASE_URL })
-    .catch((err) => console.error('[Cron] monthly send failed:', err));
+  return sendMonthlyFeedbackForms({
+    smtpConfig,
+    appBaseUrl: APP_BASE_URL,
+    cronSecret: CRON_SECRET,
+    selfUrl: `${APP_BASE_URL}/api/cron/monthly-send`
+  });
 }
 
 function runSixMonthReport() {
@@ -1137,12 +1141,12 @@ function requireCronSecret(req, res, next) {
 }
 
 app.post('/api/cron/monthly-send', requireCronSecret, async (req, res) => {
-  try {
-    const result = await runMonthlySend();
-    res.json({ ok: true, ...result });
-  } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
-  }
+  // Respond immediately; the send loop runs in the background (and chains
+  // across fresh invocations if the client list is large) so the request never
+  // exceeds Vercel's function duration limit.
+  res.status(202).json({ ok: true, processing: true, note: 'Sending feedback requests in the background; rows appear as each email is sent.' });
+  runInBackground(() => runMonthlySend())
+    .catch((err) => console.error('[Cron] monthly send failed:', err));
 });
 
 app.post('/api/cron/six-month-report', requireCronSecret, async (req, res) => {

@@ -608,6 +608,24 @@ async function findFeedbackRequestByToken(token) {
   return getRow('SELECT * FROM feedback_requests WHERE token = ?', [String(token || '')]);
 }
 
+// Used by the monthly send to check idempotency BEFORE attempting an email,
+// so a row only ever exists when the email was actually sent.
+async function findFeedbackRequestByClientMonth(clientId, month) {
+  const monthKey = String(month).slice(0, 7);
+  return getRow('SELECT * FROM feedback_requests WHERE client_id = ? AND month = ?', [clientId, monthKey]);
+}
+
+// Counts active clients that do not yet have a feedback_requests row for the
+// given month — i.e. clients still needing a send. Drives batch chaining.
+async function countActiveClientsWithoutRequest(month) {
+  const monthKey = String(month).slice(0, 7);
+  const row = await getRow(
+    `SELECT COUNT(*) AS n FROM clients c WHERE c.status = 'active' AND NOT EXISTS (SELECT 1 FROM feedback_requests fr WHERE fr.client_id = c.id AND fr.month = ?)`,
+    [monthKey]
+  );
+  return Number(row && row.n ? row.n : 0);
+}
+
 async function markFeedbackRequestSubmitted(id) {
   const info = await run('UPDATE feedback_requests SET submitted = 1 WHERE id = ?', [id]);
   return info.changes > 0;
@@ -667,6 +685,8 @@ module.exports = {
   clientFeedbackReportCount,
   insertFeedbackRequest,
   findFeedbackRequestByToken,
+  findFeedbackRequestByClientMonth,
+  countActiveClientsWithoutRequest,
   markFeedbackRequestSubmitted,
   insertAlertLog,
   deleteAlertLog
