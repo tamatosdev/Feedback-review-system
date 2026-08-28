@@ -116,6 +116,10 @@ async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl, extraRecipie
     seen.add(key);
     to.push(addr);
   }
+  if (to.length === 0) {
+    console.log('[Email] No report recipients (ADMIN_EMAIL and extra recipients empty); skipping per-submission report email.');
+    return null;
+  }
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
@@ -130,6 +134,10 @@ async function sendFeedbackEmail(config, record, pdfBuffer, pdfUrl, extraRecipie
 }
 
 async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
+  if (!config.adminEmail) {
+    console.log('[Email] ADMIN_EMAIL not set; skipping six-month combined report email.');
+    return null;
+  }
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
@@ -188,6 +196,10 @@ async function sendClientFeedbackRequest(config, client, link) {
 }
 
 async function sendNoFeedbackEmail(config, from, to) {
+  if (!config.adminEmail) {
+    console.log('[Email] ADMIN_EMAIL not set; skipping no-feedback notice email.');
+    return null;
+  }
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
@@ -301,10 +313,18 @@ function noResponseInternalAlertContent({ name, email }, month, days, dashboardU
 }
 
 async function sendAlertEmail(config, { to, subject, text, html }) {
+  const normalized = Array.isArray(to)
+    ? to.map((x) => String(x).trim()).filter(Boolean)
+    : (to ? String(to).trim() : '');
+  const hasRecipient = Array.isArray(normalized) ? normalized.length > 0 : !!normalized;
+  if (!hasRecipient) {
+    console.log('[Email] No recipient for alert email; skipping send.');
+    return null;
+  }
   const mailer = createTransport(config);
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
-    to,
+    to: normalized,
     subject,
     text,
     html

@@ -3,7 +3,7 @@ const { DEPARTMENTS } = require('./dashboard');
 const email = require('./email');
 
 // Phase 3 automated alerts — all thresholds env-configurable:
-const ALERT_EMAIL = (process.env.ALERT_EMAIL || '').trim() || (process.env.ADMIN_EMAIL || '').trim() || 'tahir@puredesigners.com';
+const ALERT_EMAIL = (process.env.ALERT_EMAIL || '').trim() || (process.env.ADMIN_EMAIL || '').trim() || '';
 const LOW_SCORE_THRESHOLD = Number(process.env.ALERT_LOW_SCORE_THRESHOLD || 3.0);
 const MOM_DROP_THRESHOLD = Number(process.env.ALERT_MOM_DROP_THRESHOLD || 1.0);
 const CONSECUTIVE_LOW_MONTHS = Number(process.env.ALERT_CONSECUTIVE_LOW_MONTHS || 2);
@@ -45,6 +45,10 @@ function dashboardUrl(base, clientId) {
 async function sendOnce({ alertType, clientId = null, department = '', period, smtpConfig, content, out }) {
   let dedupKey = null;
   try {
+    if (!ALERT_EMAIL || !EMAIL_RE.test(ALERT_EMAIL)) {
+      console.log(`[Alerts] No ALERT_EMAIL/ADMIN_EMAIL configured; skipping ${alertType} alert (client ${clientId || '—'}, ${period}).`);
+      return false;
+    }
     const reserved = await insertAlertLog({ alertType, clientId, department, period });
     if (!reserved.created) return false;
     dedupKey = reserved.dedupKey;
@@ -180,7 +184,7 @@ async function evaluateSubmissionAlerts({ client, record, smtpConfig, appBaseUrl
 async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3000', adminEmail } = {}) {
   const summary = { checked: 0, reminded: 0, internalSent: 0, alreadyAlerted: 0, skipped: 0, failed: 0, errors: [] };
   const base = String(appBaseUrl).replace(/\/$/, '');
-  const internalRecipient = adminEmail || (process.env.ADMIN_EMAIL || '').trim() || (smtpConfig && smtpConfig.adminEmail) || 'tahir@puredesigners.com';
+  const internalRecipient = adminEmail || (process.env.ADMIN_EMAIL || '').trim() || (smtpConfig && smtpConfig.adminEmail) || '';
   const now = new Date();
   const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
@@ -222,11 +226,16 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
         });
         summary.reminded++;
       }
-      await email.sendAlertEmail(smtpConfig, {
-        to: internalRecipient,
-        ...email.noResponseInternalAlertContent({ name: r.name, email: r.email }, month, days, dashboardUrl(base, r.client_id))
-      });
-      summary.internalSent++;
+      const hasInternal = internalRecipient && EMAIL_RE.test(internalRecipient);
+      if (hasInternal) {
+        await email.sendAlertEmail(smtpConfig, {
+          to: internalRecipient,
+          ...email.noResponseInternalAlertContent({ name: r.name, email: r.email }, month, days, dashboardUrl(base, r.client_id))
+        });
+        summary.internalSent++;
+      } else {
+        console.log(`[Alerts] No internal recipient (ADMIN_EMAIL/ALERT_EMAIL) configured; skipping no-response internal alert for ${r.name || r.client_id} (client reminder ${hasClientEmail ? 'sent' : 'skipped'}).`);
+      }
     } catch (err) {
       summary.failed++;
       summary.errors.push(`${r.name || r.client_id}: ${err.message}`);

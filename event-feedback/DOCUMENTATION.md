@@ -190,7 +190,7 @@ Copy `.env.example` → `.env` and fill in. **Never commit `.env`.**
 | `SMTP_PORT` | SMTP port | `465` |
 | `SMTP_USER` | Mailbox address (sender) | `tahir@puredesigners.com` |
 | `SMTP_PASS` | Mailbox password | *(empty → emails skipped)* |
-| `ADMIN_EMAIL` | Recipient of every report | `tahir@puredesigners.com` |
+| `ADMIN_EMAIL` | **Optional.** Organizer/team copy of every per-submission report + recipient of internal alerts (no-response, low-score). If unset, no admin email is sent — but the client's Account Manager and `LEADERSHIP_EMAILS` (on low scores) still receive the report normally. | *(empty)* |
 | `LEADERSHIP_EMAILS` | Comma-separated leadership addresses that also receive the **full report email (with PDF)** when a submission's overall score (`agency_leadership_score`) is below `ALERT_LOW_SCORE_THRESHOLD`; blank = none, entries trimmed, empty entries ignored, de-duplicated against `ADMIN_EMAIL`/`account_manager_email` | *(empty)* |
 | `PUBLIC_URL` | Public base URL for links in emails/PDFs | `http://localhost:3000` |
 | `PORT` | Server port | `3000` |
@@ -199,7 +199,7 @@ Copy `.env.example` → `.env` and fill in. **Never commit `.env`.**
 | `MONTHLY_SEND_CRON` | Cron expression for the monthly form send | `0 9 28 * *` |
 | `SIX_MONTH_REPORT_CRON` | Cron expression for the 6-month report | `0 9 1 1,7 *` |
 | `CRON_SECRET` | Optional secret for external cron-trigger endpoints (`x-cron-secret` header) | *(empty → no auth check)* |
-| `ALERT_NO_RESPONSE_DAYS` | Days an unanswered monthly feedback request may age before the client gets a "Gentle Reminder" email and an internal alert to `ADMIN_EMAIL` | `5` |
+| `ALERT_NO_RESPONSE_DAYS` | Days an unanswered monthly feedback request may age before the client gets a "Gentle Reminder" email and (if `ADMIN_EMAIL`/`ALERT_EMAIL` is set) an internal alert | `5` |
 | `ADMIN_USERNAME` | Admin login username (single fixed account — no registration) | *(empty → auth disabled + startup warning)* |
 | `SUPABASE_URL` | Supabase project URL — with `SUPABASE_SERVICE_ROLE_KEY` enables the `supabase` storage driver | *(empty → driver auto-detected)* |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service-role key (storage uploads; keep secret) | *(empty → driver auto-detected)* |
@@ -442,7 +442,7 @@ Implemented in `server/email.js` with Nodemailer.
 | Username | `tahir@puredesigners.com` |
 | Password | `SMTP_PASS` from `.env` |
 
-- **Recipient:** always the admin (`ADMIN_EMAIL`) — never the client.
+- **Recipient:** the admin (`ADMIN_EMAIL`, if set) and any `account_manager_email` / `LEADERSHIP_EMAILS` (low score) — never the client. If `ADMIN_EMAIL` is unset, the report still goes to the Account Manager / leadership; if there is no recipient at all, the email is skipped with a log (no crash).
 - **Account Manager copy:** if the submitting client has a non-empty, valid `account_manager_email`, the **same** single-submission email is also sent to that address (added as an extra recipient, not a separate template). If `account_manager_email` is blank/unset for that client, the copy is silently skipped — it never causes a blank-recipient error or crash.
 - **Single submission email:** subject `New Client Feedback – <Service Name> (<Rating>/5)`; body has summary, rating, sentiment, urgency, PDF link, submission ID, timestamp; PDF attached as `<submissionId>.pdf`.
 - **Combined email:** subject `Combined Client Feedback Report <from> to <to> (<count> submissions)`; body has overall summary, sentiment breakdown, key highlights, top improvements, PDF link; PDF attached.
@@ -777,7 +777,7 @@ The app is a normal long-running Express server **and** a Vercel serverless func
 
 ## 22. Future Improvements
 
-- **Reminder job:** resend the form to clients who haven't submitted after `ALERT_NO_RESPONSE_DAYS` days (default **5**), sending a "Gentle Reminder | Client Feedback" email with the tokenized `/feedback/<token>` link plus an internal `ALERT: No response` email to `ADMIN_EMAIL`.
+- **Reminder job:** resend the form to clients who haven't submitted after `ALERT_NO_RESPONSE_DAYS` days (default **5**), sending a "Gentle Reminder | Client Feedback" email with the tokenized `/feedback/<token>` link plus an internal `ALERT: No response` email to `ADMIN_EMAIL`/`ALERT_EMAIL` (only if one is configured; the client reminder always sends regardless).
 - **Per-service-type breakdown** inside the 6-month report.
 - **Per-user admin accounts / role-based access** (currently a single fixed admin login).
 - **Client opt-out / unsubscribe** mechanism (link-level preference stored in `clients`).

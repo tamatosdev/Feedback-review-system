@@ -27,7 +27,7 @@ const smtpConfig = {
   smtpPort: Number(process.env.SMTP_PORT) || 465,
   smtpUser: process.env.SMTP_USER || 'tahir@puredesigners.com',
   smtpPass: process.env.SMTP_PASS || '',
-  adminEmail: process.env.ADMIN_EMAIL || 'tahir@puredesigners.com',
+  adminEmail: process.env.ADMIN_EMAIL || '',
   smtpSecure: process.env.SMTP_SECURE ? process.env.SMTP_SECURE.toLowerCase() === 'true' : true,
   leadershipEmails: parseLeadershipEmails(process.env.LEADERSHIP_EMAILS)
 };
