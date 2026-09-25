@@ -161,7 +161,11 @@ test('combinedHTML shows serviceType from DB rows (no literal "undefined")', asy
 test('on-demand report for a tokenized submission shows the "General" fallback service and request month', async () => {
   const client = await insertClient({ name: 'Report Co', email: 'report@co.com' });
   const token = crypto.randomUUID();
-  await insertFeedbackRequest({ client_id: client.id, month: '2026-09', token });
+  // Deliberately use a month that can never be the current calendar month, so
+  // the "request month must not leak into the report" assertion stays valid
+  // whatever day this suite runs. (A hardcoded month went stale once the real
+  // clock reached it.) 1999-01 is safely in the past and distinct from now.
+  await insertFeedbackRequest({ client_id: client.id, month: '1999-01', token });
 
   const server = app.listen(0);
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -182,7 +186,7 @@ test('on-demand report for a tokenized submission shows the "General" fallback s
     const stored = await getFeedbackReport(json.submissionId);
     assert.ok(!repHtml.includes('General'), 'service name (General fallback) must not appear in the report');
     assert.strictEqual(fieldValue(repHtml, 'Form Submission Date'), ymd(stored.timestamp), 'service date should be the submission date');
-    assert.ok(!repHtml.includes('2026-09'), 'service date should NOT be the feedback request month');
+    assert.ok(!repHtml.includes('1999-01'), 'service date should NOT be the feedback request month');
     assert.ok(!repHtml.includes('undefined'), 'must never render literal "undefined"');
   } finally {
     if (server.closeAllConnections) server.closeAllConnections();

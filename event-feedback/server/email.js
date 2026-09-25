@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const { DEPARTMENT_SCORES, scoreText, esc, safeText } = require('./report');
 
 const BRAND_NAME = 'Craftsmen Media';
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Parse a comma-separated list of addresses (LEADERSHIP_EMAILS). Defensive:
 // trims whitespace, drops empty entries (e.g. trailing comma), and returns []
@@ -332,6 +333,45 @@ async function sendAlertEmail(config, { to, subject, text, html }) {
   return info;
 }
 
+// Account Manager notification (monthly send): a short internal email letting
+// the AM know the feedback request was emailed to their client. Plain-text +
+// HTML, using the same branded wrapAlertContent header/footer as other
+// internal emails. The tokenized (client-only) link is intentionally omitted.
+function accountManagerRequestSentContent(client, date = new Date()) {
+  const name = client && client.name ? String(client.name).trim() : 'Unknown';
+  const clientEmail = client && client.email ? String(client.email).trim() : '';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const day = String(date.getDate()).padStart(2, '0');
+  const dateLabel = `${day} ${months[date.getMonth()]} ${date.getFullYear()}`;
+  const subject = `Feedback request sent to ${name}`;
+  return {
+    subject,
+    ...wrapAlertContent(subject, [
+      `This is to confirm that the monthly client feedback request was sent to ${name} (${clientEmail || 'no email'}) today, ${dateLabel}.`,
+      ``,
+      `No action is required from you — this is just for your awareness so you can follow up with the client if needed.`
+    ])
+  };
+}
+
+async function sendAccountManagerNotification(config, client, date = new Date()) {
+  const amEmail = client && client.accountManagerEmail ? String(client.accountManagerEmail).trim() : '';
+  if (!amEmail || !EMAIL_RE.test(amEmail)) {
+    console.log(`[Email] No valid account_manager_email for client ${(client && client.id) || '—'} (${(client && client.name) || 'unknown'}); skipping Account Manager notification.`);
+    return null;
+  }
+  const mailer = createTransport(config);
+  const { subject, text, html } = accountManagerRequestSentContent(client, date);
+  const info = await mailer.sendMail({
+    from: `"${BRAND_NAME}" <${config.smtpUser}>`,
+    to: amEmail,
+    subject,
+    text,
+    html
+  });
+  return info;
+}
+
 module.exports = {
   sendFeedbackEmail,
   sendCombinedEmail,
@@ -347,5 +387,7 @@ module.exports = {
   momDropAlertContent,
   escalationAlertContent,
   noResponseClientReminderContent,
-  noResponseInternalAlertContent
+  noResponseInternalAlertContent,
+  accountManagerRequestSentContent,
+  sendAccountManagerNotification
 };

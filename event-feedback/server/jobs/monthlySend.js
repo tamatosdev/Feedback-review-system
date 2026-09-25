@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const { listActiveClients, insertFeedbackRequest, findFeedbackRequestByClientMonth } = require('../db');
-const { sendClientFeedbackRequest } = require('../email');
+const { sendClientFeedbackRequest, sendAccountManagerNotification } = require('../email');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MONTHLY_BATCH_SIZE = Number(process.env.MONTHLY_BATCH_SIZE || 10);
@@ -34,8 +34,12 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
   let skipped = 0;
   let failed = 0;
   let processed = 0;
+  let amNotified = 0;
+  let amSkipped = 0;
+  let amFailed = 0;
 
   const slice = clients.slice(offset, offset + batchSize);
+  const amNotifications = [];
   for (const client of slice) {
     processed++;
 
@@ -64,11 +68,35 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
       // Persist ONLY after the email succeeded, so a crash/timeout before this
       // point leaves no row and the client is retried next time.
       await insertFeedbackRequest({ client_id: client.id, month, token });
+      // Best-effort Account Manager notification. Fired after the client send
+      // is confirmed (and the row is written) so the AM is only notified when
+      // the client was actually emailed. Runs in PARALLEL with the rest of the
+      // batch and is awaited (allSettled) after the loop, so it never blocks
+      // the client send or adds a serial SMTP round-trip per client. Failures
+      // are caught here so they can't affect the client send or the batch.
+      if (client.accountManagerEmail && EMAIL_RE.test(client.accountManagerEmail)) {
+        amNotifications.push(
+          sendAccountManagerNotification(smtpConfig, client)
+            .then(() => { amNotified++; console.log(`[MonthlySend] AM notification sent for client ${client.id} (${client.accountManagerEmail})`); })
+            .catch((err) => {
+              amFailed++;
+              console.error(`[MonthlySend] AM notification failed for client ${client.id} (${client.email}):`, err.message);
+            })
+        );
+      } else {
+        amSkipped++;
+        console.log(`[MonthlySend] No account_manager_email for client ${client.id}; skipping AM notification`);
+      }
     } catch (err) {
       failed++;
       console.error(`[MonthlySend] Failed to email client ${client.id} (${client.email}):`, err.message);
     }
   }
+
+  // Let in-flight AM notifications settle before reporting (parallel, so this
+  // is ~one SMTP round-trip, not one per client). allSettled keeps a single
+  // AM failure from ever breaking the batch.
+  if (amNotifications.length) await Promise.allSettled(amNotifications);
 
   const nextOffset = offset + processed;
   const moreRemaining = nextOffset < clients.length;
@@ -85,8 +113,8 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
       .catch((e) => console.error('[MonthlySend] chain fetch failed:', e.message));
   }
 
-  const summary = { month, sent, skipped, failed, processed, offset, nextOffset, moreRemaining };
-  console.log(`[MonthlySend] batch done for ${month}: offset ${offset}, ${sent} sent, ${skipped} skipped, ${failed} failed, nextOffset ${nextOffset}`);
+  const summary = { month, sent, skipped, failed, processed, offset, nextOffset, moreRemaining, amNotified, amSkipped, amFailed };
+  console.log(`[MonthlySend] batch done for ${month}: offset ${offset}, ${sent} sent, ${skipped} skipped, ${failed} failed, nextOffset ${nextOffset}, AM notified ${amNotified}, AM skipped ${amSkipped}, AM failed ${amFailed}`);
   return summary;
 }
 

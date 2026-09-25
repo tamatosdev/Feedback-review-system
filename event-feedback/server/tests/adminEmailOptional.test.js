@@ -125,13 +125,23 @@ test('evaluateSubmissionAlerts low-score with no ALERT_EMAIL/ADMIN_EMAIL routes 
   }
 });
 
+// runNoResponseCheck only scans feedback_requests rows whose month equals the
+// CURRENT calendar month, and reminds once the row is older than the
+// no-response window. Derive both from the clock so this fixture can never go
+// stale when the calendar rolls over.
+const CURRENT_MONTH = (() => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+})();
+const AGED_SENT_AT = new Date(Date.now() - 10 * 86400000).toISOString();
+
 test('runNoResponseCheck with no admin recipient sends client reminder AND routes internal alert to LEADERSHIP_EMAILS', async () => {
   captured.length = 0;
   // Seed a client + request aged past the no-response window.
   const client = await insertClient({ name: 'NoResp', email: 'noresp@client.com', accountManagerEmail: 'am@agency.com' });
   const token = require('crypto').randomUUID();
-  await insertFeedbackRequest({ client_id: client.id, month: '2026-08', token });
-  db.prepare('UPDATE feedback_requests SET sent_at = ? WHERE id = (SELECT id FROM feedback_requests WHERE token=?)').run('2026-08-01T00:00:00Z', token);
+  await insertFeedbackRequest({ client_id: client.id, month: CURRENT_MONTH, token });
+  db.prepare('UPDATE feedback_requests SET sent_at = ? WHERE id = (SELECT id FROM feedback_requests WHERE token=?)').run(AGED_SENT_AT, token);
   const summary = await alerts.runNoResponseCheck({ smtpConfig: BASE_CONFIG, appBaseUrl: 'http://app' });
   const clientMails = captured.filter((m) => m.to === 'noresp@client.com');
   const internalMails = captured.filter((m) => /No response/i.test(m.subject || ''));
