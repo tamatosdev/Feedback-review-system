@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { listActiveClients, insertFeedbackRequest, findFeedbackRequestByClientMonth } = require('../db');
 const { sendClientFeedbackRequest, sendAccountManagerNotification } = require('../email');
+const { coerceBaseUrl } = require('../baseUrl');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MONTHLY_BATCH_SIZE = Number(process.env.MONTHLY_BATCH_SIZE || 10);
@@ -27,7 +28,7 @@ function currentMonth(now = new Date()) {
  */
 async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, selfUrl, batchSize = MONTHLY_BATCH_SIZE, offset = 0 } = {}) {
   const month = currentMonth();
-  const base = String(appBaseUrl || 'http://localhost:3000').replace(/\/$/, '');
+  const base = coerceBaseUrl(appBaseUrl);
   const clients = await listActiveClients();
 
   let sent = 0;

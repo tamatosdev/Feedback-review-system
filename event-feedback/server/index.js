@@ -14,13 +14,16 @@ const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = req
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
 const { evaluateSubmissionAlerts, runNoResponseCheck } = require('./alerts');
+const { resolveBaseUrl } = require('./baseUrl');
 
 const app = express();
 app.use(express.json({ limit: '2mb' }));
 
 const PORT = Number(process.env.PORT) || 3000;
-const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
-const APP_BASE_URL = (process.env.APP_BASE_URL || PUBLIC_URL).replace(/\/$/, '');
+// Never degrades to http://localhost in production: falls back to the canonical
+// domain if APP_BASE_URL / PUBLIC_URL are missing or point at loopback.
+const APP_BASE_URL = resolveBaseUrl();
+const PUBLIC_URL = APP_BASE_URL;
 
 const smtpConfig = {
   smtpHost: process.env.SMTP_HOST || 'smtp.hostinger.com',

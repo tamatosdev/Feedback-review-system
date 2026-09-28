@@ -31,7 +31,7 @@ function detectDriver() {
 const driver = detectDriver();
 
 const PORT = Number(process.env.PORT) || 3000;
-const PUBLIC_URL = (process.env.PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+const PUBLIC_URL = require('./baseUrl').resolveBaseUrl();
 const reportsDir = path.join(__dirname, '..', 'reports');
 
 function ensureDiskDir() {

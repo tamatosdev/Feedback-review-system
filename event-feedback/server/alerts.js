@@ -1,5 +1,6 @@
 const { allRows, getRow, insertAlertLog, deleteAlertLog } = require('./db');
 const { DEPARTMENTS } = require('./dashboard');
+const { coerceBaseUrl } = require('./baseUrl');
 const email = require('./email');
 
 // Phase 3 automated alerts — all thresholds env-configurable:
@@ -36,7 +37,7 @@ function trailingConsecutiveLow(history, threshold) {
 }
 
 function dashboardUrl(base, clientId) {
-  const root = String(base || 'http://localhost:3000').replace(/\/$/, '');
+  const root = coerceBaseUrl(base);
   return clientId ? `${root}/dashboard.html?client=${clientId}` : `${root}/dashboard.html`;
 }
 
@@ -192,7 +193,7 @@ async function evaluateSubmissionAlerts({ client, record, smtpConfig, appBaseUrl
 // per (client, month) — the alert_log dedup prevents repeat reminders.
 async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3000', adminEmail } = {}) {
   const summary = { checked: 0, reminded: 0, internalSent: 0, alreadyAlerted: 0, skipped: 0, failed: 0, errors: [] };
-  const base = String(appBaseUrl).replace(/\/$/, '');
+  const base = coerceBaseUrl(appBaseUrl);
   const explicitAdmin = (adminEmail || (process.env.ADMIN_EMAIL || '').trim() || (smtpConfig && smtpConfig.adminEmail) || '').trim();
   const internalRecipients = explicitAdmin && EMAIL_RE.test(explicitAdmin)
     ? [explicitAdmin]
