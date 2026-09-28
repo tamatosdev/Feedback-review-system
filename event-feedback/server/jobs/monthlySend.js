@@ -105,12 +105,40 @@ async function sendMonthlyFeedbackForms({ smtpConfig, appBaseUrl, cronSecret, se
   // regardless of how many clients there are. Single pass (offset advances to
   // the end of the list) so permanently-failing recipients are attempted once
   // and the job terminates instead of looping forever.
-  if (moreRemaining && selfUrl && cronSecret) {
-    const sep = selfUrl.includes('?') ? '&' : '?';
-    const nextUrl = `${selfUrl}${sep}offset=${nextOffset}`;
-    console.log(`[MonthlySend] ${clients.length - nextOffset} client(s) remain; chaining next batch (offset ${nextOffset}).`);
-    fetch(nextUrl, { method: 'POST', headers: { 'x-cron-secret': cronSecret } })
-      .catch((e) => console.error('[MonthlySend] chain fetch failed:', e.message));
+  //
+  // The fetch MUST be awaited. This runs inside a Vercel waitUntil() whose
+  // promise is this function; a fire-and-forget fetch was previously resolved
+  // only in the "initiated" state, so the function returned, waitUntil settled,
+  // the runtime froze the instance and the request to the next batch was killed
+  // before it completed - the run silently stopped after batch 1. Awaiting
+  // costs one round-trip (~ms, since the next invocation replies 202 straight
+  // away) and keeps the chain inside the waitUntil lifetime.
+  if (moreRemaining) {
+    if (!selfUrl) {
+      console.error(`[MonthlySend] ${clients.length - nextOffset} client(s) remain but no selfUrl is configured (check APP_BASE_URL); cannot chain the next batch.`);
+    } else {
+      const sep = selfUrl.includes('?') ? '&' : '?';
+      const nextUrl = `${selfUrl}${sep}offset=${nextOffset}`;
+      console.log(`[MonthlySend] ${clients.length - nextOffset} client(s) remain; chaining next batch (offset ${nextOffset}).`);
+      // Gate on selfUrl only, not on cronSecret: an unset CRON_SECRET must not
+      // silently disable the chain, it just means the endpoint needs no header.
+      const headers = cronSecret ? { 'x-cron-secret': cronSecret } : {};
+      // Retry briefly so a transient blip does not abandon the remaining
+      // clients; a failed chain is logged loudly (it is otherwise invisible).
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+          const res = await fetch(nextUrl, { method: 'POST', headers });
+          if (res.ok) {
+            console.log(`[MonthlySend] chained next batch (offset ${nextOffset}) via HTTP ${res.status}.`);
+            break;
+          }
+          console.error(`[MonthlySend] chain to offset ${nextOffset} returned HTTP ${res.status}${attempt < 3 ? '; retrying' : ''}.`);
+        } catch (e) {
+          console.error(`[MonthlySend] chain fetch to offset ${nextOffset} failed (attempt ${attempt}/3):`, e.message);
+        }
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
   }
 
   const summary = { month, sent, skipped, failed, processed, offset, nextOffset, moreRemaining, amNotified, amSkipped, amFailed };

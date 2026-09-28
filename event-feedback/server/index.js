@@ -1141,7 +1141,14 @@ function requireCronSecret(req, res, next) {
   next();
 }
 
-app.post('/api/cron/monthly-send', requireCronSecret, async (req, res) => {
+// Vercel Cron invokes the configured path with an HTTP **GET** request, not a
+// POST. These handlers are therefore registered for BOTH methods: `get` so
+// Vercel's scheduler can actually reach them, and `post` so the internal
+// batch-chaining `fetch` (and any manual/curl trigger) keeps working.
+// Without the `get` registration every cron 404s and never runs.
+// Auth still applies to both: when `CRON_SECRET` is set, Vercel forwards it as
+// `Authorization: Bearer <CRON_SECRET>`, which requireCronSecret accepts.
+async function handleMonthlySendCron(req, res) {
   // Respond immediately; the send loop runs in the background (and chains
   // across fresh invocations until the whole client list is covered) so the
   // request never exceeds Vercel's function duration limit. `offset` (from the
@@ -1150,25 +1157,32 @@ app.post('/api/cron/monthly-send', requireCronSecret, async (req, res) => {
   res.status(202).json({ ok: true, processing: true, offset, note: 'Sending feedback requests in the background; rows appear as each email is sent.' });
   runInBackground(() => runMonthlySend(offset))
     .catch((err) => console.error('[Cron] monthly send failed:', err));
-});
+}
 
-app.post('/api/cron/six-month-report', requireCronSecret, async (req, res) => {
+async function handleSixMonthReportCron(req, res) {
   try {
     const result = await runSixMonthReport();
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
-});
+}
 
-app.post('/api/cron/no-response-check', requireCronSecret, async (req, res) => {
+async function handleNoResponseCheckCron(req, res) {
   try {
     const result = await runNoResponseCheckJob();
     res.json({ ok: true, ...result });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
-});
+}
+
+app.get('/api/cron/monthly-send', requireCronSecret, handleMonthlySendCron);
+app.post('/api/cron/monthly-send', requireCronSecret, handleMonthlySendCron);
+app.get('/api/cron/six-month-report', requireCronSecret, handleSixMonthReportCron);
+app.post('/api/cron/six-month-report', requireCronSecret, handleSixMonthReportCron);
+app.get('/api/cron/no-response-check', requireCronSecret, handleNoResponseCheckCron);
+app.post('/api/cron/no-response-check', requireCronSecret, handleNoResponseCheckCron);
 
 app.get('/api/health', async (req, res) => {
   try {
