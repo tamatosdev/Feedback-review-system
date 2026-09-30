@@ -183,15 +183,20 @@ function clientFeedbackRequestBody(client, link) {
   return { text, html };
 }
 
-async function sendClientFeedbackRequest(config, client, link) {
+// `options.subject` overrides the default subject, and `options.intro` prepends
+// an extra line to the body. Both are used to send a clearly-labelled
+// correction when a previously-sent link turned out to be wrong, so the client
+// is not confused by what looks like a duplicate request.
+async function sendClientFeedbackRequest(config, client, link, options = {}) {
   const mailer = createTransport(config);
   const { text, html } = clientFeedbackRequestBody(client, link);
+  const intro = options.intro ? String(options.intro).trim() : '';
   const info = await mailer.sendMail({
     from: `"${BRAND_NAME}" <${config.smtpUser}>`,
     to: client.email,
-    subject: `Client Feedback | Craftsmen Media`,
-    text,
-    html
+    subject: options.subject || `Client Feedback | Craftsmen Media`,
+    text: intro ? intro + '\n\n' + text : text,
+    html: intro ? `<p style="margin:0 0 16px">${esc(intro)}</p>` + html : html
   });
   return info;
 }
