@@ -159,3 +159,29 @@ test('dryRun surfaces requests that an existing dedup row would block', async ()
   const blockedEmails = new Set(['crossmonth@nr.test']);
   for (const w of dry.wouldRemind) assert.ok(!blockedEmails.has(w.email), 'already-alerted client is not listed again');
 });
+
+test('dryRun classifies many requests across many months in a single pass', async () => {
+  // Guards the batched dedup lookup: an implementation that only tracks the
+  // first/last dedup key, or looks up per-row with a broken key, would drop
+  // candidates from this list.
+  const months = ['2026-01', '2026-03', '2026-06', '2026-09'];
+  const made = [];
+  for (const m of months) {
+    const { client, req } = await pendingClient('Bulk ' + m, `bulk-${m}@nr.test`, m, 20);
+    made.push({ m, client, req });
+  }
+  // '2026-03' is already deduped, the rest are not.
+  const blocked = made.find((x) => x.m === '2026-03');
+  db.prepare('INSERT INTO alert_log (alert_type, client_id, department, period, detail, dedup_key, created_at) VALUES (?,?,?,?,?,?,?)')
+    .run('no_response', blocked.client.id, null, blocked.m, '', alertDedupKey({ alertType: 'no_response', clientId: blocked.client.id, period: blocked.m }), new Date().toISOString());
+
+  const dry = await runNoResponseCheck({ smtpConfig: SMTP, appBaseUrl: 'https://app.nr.test', dryRun: true });
+  const listed = dry.wouldRemind.map((w) => w.email);
+
+  for (const m of months) {
+    const email = `bulk-${m}@nr.test`;
+    const shouldBeListed = m !== '2026-03';
+    assert.strictEqual(listed.includes(email), shouldBeListed, `${email} listed=${listed.includes(email)}, expected ${shouldBeListed}`);
+  }
+  assert.ok(listed.includes('bulk-2026-09@nr.test'), 'a month that is not the current calendar month is still classified');
+});

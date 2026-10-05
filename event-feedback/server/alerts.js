@@ -221,6 +221,19 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
     ORDER BY fr.sent_at, fr.client_id
   `);
 
+  // For the dry-run preview, load every existing no_response dedup key in ONE
+  // query instead of a SELECT per candidate. This loop runs on every pending
+  // request from every month now, so a per-row lookup would add a database
+  // round-trip each time and eventually threaten the function timeout.
+  // The real (non-dry) path does not use this set: insertAlertLog's
+  // ON CONFLICT DO NOTHING remains the atomic, race-safe authority on whether a
+  // reminder was already sent.
+  let existingNoResponseKeys = new Set();
+  if (dryRun) {
+    const prior = await allRows("SELECT dedup_key FROM alert_log WHERE alert_type = 'no_response'");
+    existingNoResponseKeys = new Set(prior.map((p) => p.dedup_key));
+  }
+
   const nowMs = Date.now();
   for (const r of rows) {
     summary.checked++;
@@ -242,8 +255,7 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
         // Read-only: report what a real run would do WITHOUT reserving the
         // dedup row. Reserving it here would permanently suppress the real
         // reminder on the next scheduled run.
-        const existing = await getRow('SELECT dedup_key FROM alert_log WHERE dedup_key = ?', [dedupKey]);
-        if (existing) {
+        if (existingNoResponseKeys.has(dedupKey)) {
           summary.alreadyAlerted++;
           continue;
         }
