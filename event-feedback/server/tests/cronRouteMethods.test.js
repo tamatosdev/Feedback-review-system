@@ -5,11 +5,37 @@ const assert = require('node:assert');
 // Vercel invokes cron paths with GET (+ `Authorization: Bearer <CRON_SECRET>`
 // when CRON_SECRET is set in the project env). These routes were previously
 // POST-only, so every scheduled invocation 404'd.
+//
+// CRITICAL: the DB must be isolated before requiring ../index. index.js calls
+// dotenv.config() on line 1, so requiring it without clearing DATABASE_URL
+// inherits the developer's real production database and SMTP credentials - and
+// these tests deliberately invoke the cron handlers, which would send real
+// emails to real clients and create real feedback_request rows. That happened:
+// running the suite created October request rows and fired live no-response
+// reminders against production. Keep the isolation below.
+const path = require('path');
+const os = require('os');
+const fs = require('fs');
+
+process.env.DB_PATH = path.join(os.tmpdir(), `feedback-cron-routes-${process.pid}.db`);
+process.env.DATABASE_URL = '';
+process.env.STORAGE_DRIVER = 'memory';
+delete process.env.VERCEL;
+delete process.env.APP_BASE_URL;
+delete process.env.PUBLIC_URL;
+
 process.env.CRON_SECRET = 'test-cron-secret';
 process.env.ADMIN_EMAIL = '';
 process.env.LEADERSHIP_EMAILS = '';
 
 const app = require('../index');
+
+test.after(() => {
+  try { require('../db').db.close(); } catch {}
+  for (const suffix of ['', '-wal', '-shm']) {
+    try { fs.unlinkSync(process.env.DB_PATH + suffix); } catch {}
+  }
+});
 
 function listen() {
   return new Promise((resolve) => {

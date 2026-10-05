@@ -635,8 +635,17 @@ async function markFeedbackRequestSubmitted(id) {
 // Each alert event has a unique dedup_key (type|client|department|period) so
 // an alert fires at most once per event, in both SQLite and Postgres.
 
+// Single source of truth for alert dedup keys. `period` is the period of the
+// thing being alerted on (e.g. the send-cycle month that created a feedback
+// request), NOT the current calendar month - keys scoped to "today's month"
+// would reset every time the calendar rolls over and would let the same
+// alert fire again for work that was already reported.
+function alertDedupKey({ alertType, clientId = null, department = '', period }) {
+  return `${alertType}|${clientId || 0}|${String(department || '').toLowerCase()}|${period}`;
+}
+
 async function insertAlertLog({ alertType, clientId = null, department = '', period, detail = '' }) {
-  const dedupKey = `${alertType}|${clientId || 0}|${String(department || '').toLowerCase()}|${period}`;
+  const dedupKey = alertDedupKey({ alertType, clientId, department, period });
   await ensureSchema();
   const sql = `INSERT INTO alert_log (alert_type, client_id, department, period, detail, dedup_key, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`;
   const args = [alertType, clientId, department || null, period, detail, dedupKey, new Date().toISOString()];
@@ -688,6 +697,7 @@ module.exports = {
   findFeedbackRequestByClientMonth,
   countActiveClientsWithoutRequest,
   markFeedbackRequestSubmitted,
+  alertDedupKey,
   insertAlertLog,
   deleteAlertLog
 };

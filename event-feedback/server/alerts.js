@@ -1,4 +1,4 @@
-const { allRows, getRow, insertAlertLog, deleteAlertLog } = require('./db');
+const { allRows, getRow, insertAlertLog, deleteAlertLog, alertDedupKey } = require('./db');
 const { DEPARTMENTS } = require('./dashboard');
 const { coerceBaseUrl } = require('./baseUrl');
 const email = require('./email');
@@ -191,23 +191,35 @@ async function evaluateSubmissionAlerts({ client, record, smtpConfig, appBaseUrl
 // Time-triggered check (#5): outstanding monthly feedback requests older than
 // ALERT_NO_RESPONSE_DAYS get a client reminder + an internal alert. One event
 // per (client, month) — the alert_log dedup prevents repeat reminders.
-async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3000', adminEmail } = {}) {
-  const summary = { checked: 0, reminded: 0, internalSent: 0, alreadyAlerted: 0, skipped: 0, failed: 0, errors: [] };
+async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3000', adminEmail, dryRun = false } = {}) {
+  const summary = { checked: 0, reminded: 0, internalSent: 0, alreadyAlerted: 0, skipped: 0, failed: 0, errors: [], dryRun: !!dryRun, wouldRemind: [] };
   const base = coerceBaseUrl(appBaseUrl);
   const explicitAdmin = (adminEmail || (process.env.ADMIN_EMAIL || '').trim() || (smtpConfig && smtpConfig.adminEmail) || '').trim();
   const internalRecipients = explicitAdmin && EMAIL_RE.test(explicitAdmin)
     ? [explicitAdmin]
     : LEADERSHIP_FALLBACK.filter((e) => EMAIL_RE.test(e));
-  const now = new Date();
-  const currentYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
+  // Scan every still-pending request belonging to an active client, no matter
+  // which calendar month created it.
+  //
+  // `fr.month` records the send cycle that minted the row; it is not the window
+  // this reminder applies to. Previously the query filtered
+  // `substr(fr.month,1,7) = currentYm`, so the moment the calendar rolled over,
+  // every still-pending request from the previous cycle silently vanished from
+  // the check and could never be reminded again. Eligibility is decided by
+  // sent_at age plus submitted status, which is what this check actually means.
+  //
+  // A client can legitimately hold two pending rows (e.g. an unanswered August
+  // cycle and an unanswered September one). Each row is a distinct outstanding
+  // request, so each gets its own reminder, deduped independently.
   const rows = await allRows(`
     SELECT fr.id AS request_id, fr.client_id, fr.month, fr.token, fr.sent_at,
            c.name, c.email
     FROM feedback_requests fr
     JOIN clients c ON c.id = fr.client_id
-    WHERE fr.submitted = 0 AND c.status = 'active' AND substr(fr.month, 1, 7) = ?
-  `, [currentYm]);
+    WHERE fr.submitted = 0 AND c.status = 'active'
+    ORDER BY fr.sent_at, fr.client_id
+  `);
 
   const nowMs = Date.now();
   for (const r of rows) {
@@ -220,14 +232,40 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
       continue;
     }
 
-    let dedupKey = null;
+    // Dedup is per (alert type, client, period-of-the-row), so a request is
+    // reminded exactly once and then never again - not once per day, and not
+    // reset when the calendar month rolls over.
+    const dedupKey = alertDedupKey({ alertType: 'no_response', clientId: r.client_id, period: month });
+    let reservedHere = false;
     try {
+      if (dryRun) {
+        // Read-only: report what a real run would do WITHOUT reserving the
+        // dedup row. Reserving it here would permanently suppress the real
+        // reminder on the next scheduled run.
+        const existing = await getRow('SELECT dedup_key FROM alert_log WHERE dedup_key = ?', [dedupKey]);
+        if (existing) {
+          summary.alreadyAlerted++;
+          continue;
+        }
+        summary.wouldRemind.push({
+          requestId: r.request_id,
+          clientId: r.client_id,
+          name: r.name,
+          email: r.email,
+          month,
+          days,
+          token: r.token,
+          link: `${base}/feedback/${r.token}`
+        });
+        continue;
+      }
+
       const reserved = await insertAlertLog({ alertType: 'no_response', clientId: r.client_id, period: month });
       if (!reserved.created) {
         summary.alreadyAlerted++;
         continue;
       }
-      dedupKey = reserved.dedupKey;
+      reservedHere = true;
       const hasClientEmail = r.email && EMAIL_RE.test(r.email);
       if (hasClientEmail) {
         await email.sendAlertEmail(smtpConfig, {
@@ -252,7 +290,10 @@ async function runNoResponseCheck({ smtpConfig, appBaseUrl = 'http://localhost:3
     } catch (err) {
       summary.failed++;
       summary.errors.push(`${r.name || r.client_id}: ${err.message}`);
-      if (dedupKey) {
+      // Only release the dedup row if THIS run reserved it, so a failed real
+      // send retries next run and a failed dry run never deletes someone
+      // else's dedup row.
+      if (reservedHere) {
         try { await deleteAlertLog(dedupKey); } catch {}
       }
       console.error('[Alerts] no-response send failed (will retry next run):', err.message);
