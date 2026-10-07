@@ -701,7 +701,7 @@
         const res = await fetch('/api/reports/combined', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to, sendEmail: false })
+          body: JSON.stringify({ from, to, client: state.client || '', sendEmail: false })
         });
         const json = await res.json();
         if (!res.ok || !json.ok) throw new Error(json.error || 'Generation failed.');

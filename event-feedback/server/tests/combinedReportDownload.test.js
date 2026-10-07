@@ -59,7 +59,7 @@ function stopServer(server) {
 
 let seedClientId = null;
 
-function seed(month) {
+function seed(month, overrides = {}) {
   return insertFeedback({
     submissionId: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
@@ -85,7 +85,8 @@ function seed(month) {
     highlights: [],
     improvementSuggestions: [],
     pdfUrl: '',
-    emailSent: 0
+    emailSent: 0,
+    ...overrides
   });
 }
 
@@ -199,6 +200,8 @@ test('the scheduled 6-month job still emails the report (unaffected by the flag)
   assert.strictEqual(sent.length, 1, 'exactly one combined email went out');
   assert.ok(result.pdfFileName, 'it saved a PDF');
   trackReport(result.pdfFileName);
+  assert.ok(!result.pdfFileName.includes('client-'),
+    'the cron has no client filter, so its file name and behaviour are unchanged');
   assert.strictEqual(result.emailSkipped, undefined, 'the job has no skip concept - it is unchanged');
 });
 
@@ -305,6 +308,124 @@ test('the dashboard validation script is served by the app', async () => {
     const body = await res.text();
     assert.ok(body.includes('function validate'), 'the validator is in the served file');
     assert.ok(body.includes('ALL_TIME_RANGE'), 'the All Time key is exported');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+// A second client whose rows must never appear in a report scoped to the first.
+let otherClientId = null;
+
+async function seedOtherClient() {
+  if (otherClientId) return otherClientId;
+  const other = await insertClient({ name: 'Other Client Ltd', email: 'other@combined.test' });
+  otherClientId = other.id;
+  await seed('2026-08', {
+    client_id: other.id,
+    attendeeName: 'Zed Exclusive Attendee',
+    companyName: 'Other Client Ltd'
+  });
+  return otherClientId;
+}
+
+test('the report honours the Client filter, including with All Time', async () => {
+  const otherId = await seedOtherClient();
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    sent.length = 0;
+    const scoped = db.prepare('SELECT COUNT(*) AS n FROM feedback_reports WHERE client_id = ?')
+      .get(seedClientId).n;
+    assert.ok(scoped >= 1, 'the scoped client has rows to report on');
+
+    // All Time (empty bounds) + a specific client: everything that client ever
+    // submitted, and nothing from anyone else.
+    const { res, json } = await postCombined(base, {
+      from: '', to: '', client: String(seedClientId), sendEmail: false
+    });
+
+    assert.strictEqual(res.status, 200, 'client + All Time is a valid combination');
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.allTime, true, 'the date side is still unfiltered');
+    assert.strictEqual(json.clientName, 'Seed Client', 'the response names the client');
+    assert.strictEqual(json.count, scoped, 'only that client\'s submissions are counted');
+    assert.strictEqual(json.pdfFileName,
+      `combined-0000-01-01-to-9999-12-31-client-${seedClientId}.pdf`,
+      'the client is encoded so it cannot overwrite the all-clients file');
+    assert.strictEqual(sent.length, 0, 'still no email');
+    trackReport(json.pdfFileName);
+
+    const htmlRes = await fetch(`${base}/reports/${encodeURIComponent(json.pdfFileName.replace(/\.pdf$/, '.html'))}`);
+    assert.strictEqual(htmlRes.status, 200, 'the HTML twin is served');
+    const html = await htmlRes.text();
+    assert.ok(html.includes('Combined Client Feedback Report — Seed Client'),
+      'the report title says who it is for');
+    assert.ok(!html.includes('Zed Exclusive Attendee'), 'the other client\'s rows are excluded');
+
+    assert.notStrictEqual(otherId, null, 'a second client exists for contrast');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('an all-clients report is unchanged when no client is selected', async () => {
+  await seedOtherClient();
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    sent.length = 0;
+    const total = db.prepare('SELECT COUNT(*) AS n FROM feedback_reports').get().n;
+
+    const { res, json } = await postCombined(base, { from: '', to: '', client: '', sendEmail: false });
+
+    assert.strictEqual(res.status, 200);
+    assert.strictEqual(json.client, '', 'no client filter was sent');
+    assert.strictEqual(json.clientName, '', 'no client in the title');
+    assert.strictEqual(json.count, total, 'every submission is included');
+    assert.strictEqual(json.pdfFileName, 'combined-0000-01-01-to-9999-12-31.pdf',
+      'the all-clients file name keeps its old shape');
+    trackReport(json.pdfFileName);
+
+    const htmlRes = await fetch(`${base}/reports/${encodeURIComponent(json.pdfFileName.replace(/\.pdf$/, '.html'))}`);
+    const html = await htmlRes.text();
+    assert.ok(html.includes('Zed Exclusive Attendee'), 'all clients are present');
+    assert.ok(!html.includes('Combined Client Feedback Report —'),
+      'the generic title stays generic');
+    assert.strictEqual(sent.length, 0);
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('a client-filtered file regenerates with the same rows when nothing is stored', async () => {
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const file = `combined-0000-01-01-to-9999-12-31-client-${seedClientId}.html`;
+  try {
+    try { fs.unlinkSync(path.join(storage.reportsDir, file)); } catch {}
+    const res = await fetch(`${base}/reports/${encodeURIComponent(file)}`);
+    assert.strictEqual(res.status, 200, 'the -client- suffix still matches COMBINED_FILE_RE');
+    const html = await res.text();
+    assert.ok(html.includes('Seed Client'), 'regeneration restores the client title');
+    assert.ok(!html.includes('Zed Exclusive Attendee'), 'regeneration applies the client filter too');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('a bad client filter is a 400, not an unfiltered report', async () => {
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    sent.length = 0;
+    const unknown = await postCombined(base, { from: '', to: '', client: '999999', sendEmail: false });
+    assert.strictEqual(unknown.res.status, 400, 'unknown client id is rejected');
+
+    const bogus = await postCombined(base, { from: '', to: '', client: 'not-a-number', sendEmail: false });
+    assert.strictEqual(bogus.res.status, 400, 'non-numeric client id is rejected');
+    assert.ok(bogus.json.error, 'the rejection explains itself');
+
+    assert.strictEqual(sent.length, 0, 'rejected requests never send anything');
   } finally {
     await stopServer(server);
   }

@@ -1,5 +1,5 @@
 const nodemailer = require('nodemailer');
-const { DEPARTMENT_SCORES, scoreText, esc, safeText, rangeLabel } = require('./report');
+const { DEPARTMENT_SCORES, scoreText, esc, safeText, rangeLabel, reportTitle } = require('./report');
 
 const BRAND_NAME = 'Craftsmen Media';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -81,7 +81,7 @@ function feedbackEmailBody(record, pdfUrl) {
 function combinedEmailBody(meta, pdfUrl, count) {
   const b = meta.overallSentimentBreakdown;
   return [
-    `Combined client feedback report for ${rangeLabel(meta)}.`,
+    `Combined client feedback report for ${meta.clientName ? `${meta.clientName}, ` : ''}${rangeLabel(meta)}.`,
     `Submissions included: ${count}`,
     ``,
     `Overall Summary:`,
@@ -143,7 +143,7 @@ async function sendCombinedEmail(config, meta, pdfBuffer, pdfUrl, count) {
   const info = await mailer.sendMail({
     from: `"Client Feedback" <${config.smtpUser}>`,
     to: config.adminEmail,
-    subject: `Combined Client Feedback Report ${rangeLabel(meta, ' to ')} (${count} submissions)`,
+    subject: `${reportTitle(meta)}${meta.clientName ? ',' : ''} ${rangeLabel(meta, ' to ')} (${count} submissions)`,
     text: combinedEmailBody(meta, pdfUrl, count),
     attachments: pdfBuffer
       ? [{ filename: `combined-feedback-${meta.from}-to-${meta.to}.pdf`, content: pdfBuffer, contentType: 'application/pdf' }]

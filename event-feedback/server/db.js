@@ -428,7 +428,7 @@ function safeJson(value, fallback) {
   }
 }
 
-async function queryFeedback({ from, to, sentiment, serviceType, eventName } = {}) {
+async function queryFeedback({ from, to, sentiment, serviceType, eventName, clauses } = {}) {
   const where = [];
   const params = [];
   if (from) {
@@ -438,6 +438,12 @@ async function queryFeedback({ from, to, sentiment, serviceType, eventName } = {
   if (to) {
     where.push('substr(month,1,10) <= ?');
     params.push(String(to).slice(0, 10));
+  }
+  // Prebuilt predicates from dashboard.js's filterClauses(), so filtered views
+  // and reports share one definition of "this client" instead of two.
+  if (clauses && clauses.where && clauses.where.length) {
+    where.push(...clauses.where);
+    params.push(...clauses.params);
   }
   if (sentiment) {
     where.push('sentiment = ?');

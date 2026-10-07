@@ -441,6 +441,8 @@ module.exports = {
   rangeYm,
   lastSixMonths,
   resolveDepartment,
+  filterClauses,
+  validateFilters,
   dashboardKpis,
   dashboardDepartment,
   dashboardMeta

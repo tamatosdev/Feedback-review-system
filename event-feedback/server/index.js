@@ -10,7 +10,7 @@ const { buildPdf, buildCombinedPdf } = require('./pdf');
 const { sendFeedbackEmail, sendCombinedEmail, parseLeadershipEmails, reportExtraRecipients } = require('./email');
 const { insertFeedback, updateFeedbackAnalysis, queryFeedback, getFeedbackReport, stats, getClient, findFeedbackRequestByToken, markFeedbackRequestSubmitted, insertClient, listClients, listClientEmails, updateClientStatus,   updateClient, upsertClientByEmail, deleteClient, clientFeedbackReportCount, dbMode, dbHost, pingDb, listTables } = require('./db');
 const { saveReport, getReport, reportUrl, fallbackReportUrl } = require('./storage');
-const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS } = require('./dashboard');
+const { dashboardKpis, dashboardDepartment, dashboardMeta, STATUS_LEVELS, filterClauses, validateFilters } = require('./dashboard');
 const { sendMonthlyFeedbackForms } = require('./jobs/monthlySend');
 const { generateSixMonthReport } = require('./jobs/sixMonthReport');
 const { evaluateSubmissionAlerts, runNoResponseCheck } = require('./alerts');
@@ -788,6 +788,30 @@ app.post('/api/reports/combined', async (req, res) => {
     const rangeFrom = allTime ? '0000-01-01' : from;
     const rangeTo = allTime ? '9999-12-31' : to;
 
+    // The dashboard's Client filter when it is not "All Clients". Validated
+    // with the same helper the KPI and department endpoints use.
+    const client = String(req.body?.client || '').trim();
+    try {
+      validateFilters({ client });
+    } catch (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    let clientName = '';
+    if (client) {
+      const record = await getClient(Number(client));
+      if (!record) {
+        return res.status(400).json({ ok: false, error: `Unknown client filter "${client}".` });
+      }
+      clientName = record.name || '';
+    }
+    // The identical predicate every other client-filtered dashboard view uses,
+    // so a filtered report and the KPIs can never disagree about a client.
+    const clientClauses = client ? filterClauses({ client }, 'feedback_reports') : undefined;
+    // Encoded in the file name because the stored bytes depend on it: without
+    // this, a client report and an all-clients report for the same range would
+    // overwrite each other and on-demand regeneration would serve the wrong one.
+    const fileSuffix = client ? `-client-${client}` : '';
+
     // sendEmail defaults to true so every existing caller keeps today's
     // behaviour. The dashboard's "Generate Consolidated Report" button passes
     // false: it only wants the file in the browser, not an email to the
@@ -796,22 +820,24 @@ app.post('/api/reports/combined', async (req, res) => {
     // email path is independent of this flag.
     const sendEmail = req.body?.sendEmail !== false;
 
-    const rows = await queryFeedback({ from: rangeFrom, to: rangeTo });
+    const rows = await queryFeedback({ from: rangeFrom, to: rangeTo, clauses: clientClauses });
     if (!rows.length) {
       return res.status(404).json({
         ok: false,
-        error: allTime ? 'No feedback submissions found.' : `No feedback found between ${from} and ${to}.`
+        error: allTime
+          ? (clientName ? `No feedback found for ${clientName}.` : 'No feedback submissions found.')
+          : `No feedback found${clientName ? ` for ${clientName}` : ''} between ${from} and ${to}.`
       });
     }
 
     const overall = await analyzeCombined(rows, { apiKey: geminiApiKey });
-    const meta = { from: rangeFrom, to: rangeTo, generatedAt: new Date().toISOString(), ...overall };
+    const meta = { from: rangeFrom, to: rangeTo, clientName, generatedAt: new Date().toISOString(), ...overall };
 
     const html = combinedHTML(meta, rows, '/assets/logo.png');
-    await saveHtml(html, `combined-${rangeFrom}-to-${rangeTo}.html`);
+    await saveHtml(html, `combined-${rangeFrom}-to-${rangeTo}${fileSuffix}.html`);
 
     const pdfBuffer = await buildCombinedPdf(meta, rows);
-    const pdfFileName = `combined-${rangeFrom}-to-${rangeTo}.pdf`;
+    const pdfFileName = `combined-${rangeFrom}-to-${rangeTo}${fileSuffix}.pdf`;
     const saved = await savePdf(pdfBuffer, pdfFileName);
     const pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
 
@@ -843,6 +869,8 @@ app.post('/api/reports/combined', async (req, res) => {
       from: rangeFrom,
       to: rangeTo,
       allTime,
+      client: client || '',
+      clientName,
       emailSent,
       emailError,
       emailSkipped,
@@ -866,8 +894,10 @@ app.post('/api/reports/combined', async (req, res) => {
 const REPORT_FILE_RE = /^([A-Za-z0-9._-]+)\.(html|pdf)$/;
 // Both filename shapes are real: the dashboard endpoint writes full dates
 // (combined-2026-01-01-to-2026-12-31.pdf) while the 6-month cron writes months
-// (combined-2026-04-to-2026-09.pdf). Accept both or regeneration 404s.
-const COMBINED_FILE_RE = /^combined-(\d{4}-\d{2}(?:-\d{2})?)-to-(\d{4}-\d{2}(?:-\d{2})?)\.(html|pdf)$/;
+// (combined-2026-04-to-2026-09.pdf). A client-filtered report adds -client-<id>
+// so filtered and unfiltered files for the same range never collide. Accept all
+// three or regeneration serves the wrong rows - or 404s.
+const COMBINED_FILE_RE = /^combined-(\d{4}-\d{2}(?:-\d{2})?)-to-(\d{4}-\d{2}(?:-\d{2})?)(?:-client-(\d+))?\.(html|pdf)$/;
 
 async function renderReportOnDemand(fileName) {
   const single = REPORT_FILE_RE.exec(fileName);
@@ -881,15 +911,26 @@ async function renderReportOnDemand(fileName) {
   }
   const combined = COMBINED_FILE_RE.exec(fileName);
   if (combined) {
+    const [, fromBound, toBound, clientId, ext] = combined;
     // A month capture (YYYY-MM) needs day bounds padded; a full-date capture
     // (YYYY-MM-DD) is already a bound and must not get a day appended.
     const startBound = (v) => (v.length === 7 ? `${v}-01` : v);
     const endBound = (v) => (v.length === 7 ? `${v}-28` : v);
-    const rows = await queryFeedback({ from: startBound(combined[1]), to: endBound(combined[2]) });
+    const clientClauses = clientId ? filterClauses({ client: clientId }, 'feedback_reports') : undefined;
+    const rows = await queryFeedback({
+      from: startBound(fromBound),
+      to: endBound(toBound),
+      clauses: clientClauses
+    });
     if (!rows.length) return null;
+    let clientName = '';
+    if (clientId) {
+      const record = await getClient(Number(clientId));
+      clientName = record && record.name ? record.name : '';
+    }
     const overall = await analyzeCombined(rows, { apiKey: geminiApiKey });
-    const meta = { from: combined[1], to: combined[2], generatedAt: new Date().toISOString(), ...overall };
-    if (combined[3] === 'pdf') {
+    const meta = { from: fromBound, to: toBound, clientName, generatedAt: new Date().toISOString(), ...overall };
+    if (ext === 'pdf') {
       return { buffer: await buildCombinedPdf(meta, rows), contentType: 'application/pdf' };
     }
     return { buffer: Buffer.from(combinedHTML(meta, rows, '/assets/logo.png')), contentType: 'text/html; charset=utf-8' };

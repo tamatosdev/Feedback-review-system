@@ -24,6 +24,13 @@ function rangeLabel(meta, sep = ' → ') {
   return `${from}${sep}${to}`;
 }
 
+// A single-client report names the client it is for; the all-clients report
+// keeps the generic title it has always had.
+function reportTitle(meta) {
+  const base = 'Combined Client Feedback Report';
+  return meta && meta.clientName ? `${base} — ${meta.clientName}` : base;
+}
+
 // The service name / service date were stored as eventName / eventDate in the
 // very first schema, then renamed to serviceType / month. Both the raw form
 // record (used during background processing) and a DB row (used for on-demand
@@ -203,7 +210,7 @@ function combinedHTML(meta, rows, logoPath) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Combined Client Feedback Report – ${esc(rangeLabel(meta, ' to '))}</title>
+<title>${esc(reportTitle(meta))} – ${esc(rangeLabel(meta, ' to '))}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -211,7 +218,7 @@ function combinedHTML(meta, rows, logoPath) {
 <body style="margin:0;padding:32px;background:#ffffff;color:${BLACK};font-family:'Inter',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6">
   <table width="100%" cellpadding="0" cellspacing="0" style="max-width:760px;margin:0 auto;border:2px solid ${ACCENT};border-radius:16px;overflow:hidden">
     <tr><td style="padding:28px 32px;border-bottom:2px solid ${ACCENT}">
-      ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">Combined Client Feedback Report</span>
+      ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">${esc(reportTitle(meta))}</span>
     </td></tr>
     <tr><td style="padding:28px 32px">
       <p style="margin:0;color:#6b7280;font-size:13px">Date range: ${esc(rangeLabel(meta))} · ${rows.length} submission(s)</p>
@@ -241,4 +248,4 @@ function combinedHTML(meta, rows, logoPath) {
 </html>`;
 }
 
-module.exports = { reportHTML, combinedHTML, stars, badge, esc, rangeLabel, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, submissionDateOf, safeText };
+module.exports = { reportHTML, combinedHTML, stars, badge, esc, rangeLabel, reportTitle, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, submissionDateOf, safeText };
