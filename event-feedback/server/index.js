@@ -774,9 +774,19 @@ app.post('/api/reports/combined', async (req, res) => {
   try {
     const from = String(req.body?.from || '').slice(0, 10);
     const to = String(req.body?.to || '').slice(0, 10);
-    if (!from || !to) {
-      return res.status(400).json({ ok: false, error: 'Both from and to dates are required.' });
+    // A half-filled custom range is a mistake - reject it. Both empty is a
+    // deliberate "All Time" choice from the dashboard and means no filter.
+    if (Boolean(from) !== Boolean(to)) {
+      return res.status(400).json({
+        ok: false,
+        error: 'Provide both a from and a to date, or leave both empty for every submission.'
+      });
     }
+    const allTime = !from && !to;
+    // Sentinel bounds keep the file name inside COMBINED_FILE_RE (so the
+    // report can be regenerated on demand) while selecting the whole table.
+    const rangeFrom = allTime ? '0000-01-01' : from;
+    const rangeTo = allTime ? '9999-12-31' : to;
 
     // sendEmail defaults to true so every existing caller keeps today's
     // behaviour. The dashboard's "Generate Consolidated Report" button passes
@@ -786,19 +796,22 @@ app.post('/api/reports/combined', async (req, res) => {
     // email path is independent of this flag.
     const sendEmail = req.body?.sendEmail !== false;
 
-    const rows = await queryFeedback({ from, to });
+    const rows = await queryFeedback({ from: rangeFrom, to: rangeTo });
     if (!rows.length) {
-      return res.status(404).json({ ok: false, error: `No feedback found between ${from} and ${to}.` });
+      return res.status(404).json({
+        ok: false,
+        error: allTime ? 'No feedback submissions found.' : `No feedback found between ${from} and ${to}.`
+      });
     }
 
     const overall = await analyzeCombined(rows, { apiKey: geminiApiKey });
-    const meta = { from, to, generatedAt: new Date().toISOString(), ...overall };
+    const meta = { from: rangeFrom, to: rangeTo, generatedAt: new Date().toISOString(), ...overall };
 
     const html = combinedHTML(meta, rows, '/assets/logo.png');
-    await saveHtml(html, `combined-${from}-to-${to}.html`);
+    await saveHtml(html, `combined-${rangeFrom}-to-${rangeTo}.html`);
 
     const pdfBuffer = await buildCombinedPdf(meta, rows);
-    const pdfFileName = `combined-${from}-to-${to}.pdf`;
+    const pdfFileName = `combined-${rangeFrom}-to-${rangeTo}.pdf`;
     const saved = await savePdf(pdfBuffer, pdfFileName);
     const pdfUrl = saved.fallback ? fallbackReportUrl(pdfFileName) : reportUrl(pdfFileName);
 
@@ -827,8 +840,9 @@ app.post('/api/reports/combined', async (req, res) => {
     res.json({
       ok: true,
       count: rows.length,
-      from,
-      to,
+      from: rangeFrom,
+      to: rangeTo,
+      allTime,
       emailSent,
       emailError,
       emailSkipped,

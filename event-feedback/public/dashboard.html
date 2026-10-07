@@ -187,6 +187,7 @@
     </section>
   </main>
 
+  <script src="/reportRange.js"></script>
   <script>
     const $ = (id) => document.getElementById(id);
 
@@ -682,8 +683,12 @@
       const btn = $('combinedBtn');
       const from = $('filterFrom').value;
       const to = $('filterTo').value;
-      if (!from || !to) {
-        alert('Pick a date range first — use a quick-range button or the custom From/To dates.');
+      // "All Time" deliberately carries no dates (computeRange returns empty
+      // bounds for it), so the check lives in /reportRange.js and treats an
+      // empty All Time selection as valid rather than as "nothing picked".
+      const check = window.ReportRange.validate(from, to, state.range);
+      if (!check.ok) {
+        alert(check.error);
         return;
       }
       btn.disabled = true;
@@ -691,7 +696,7 @@
       const resultEl = $('combinedResult');
       resultEl.classList.remove('hidden');
       resultEl.className = 'text-sm font-semibold';
-      resultEl.textContent = 'Analyzing ' + from + ' → ' + to + ' with Gemini and building the PDF…';
+      resultEl.textContent = 'Analyzing ' + (check.allTime ? 'all submissions' : from + ' → ' + to) + ' with Gemini and building the PDF…';
       try {
         const res = await fetch('/api/reports/combined', {
           method: 'POST',

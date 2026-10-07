@@ -11,6 +11,19 @@ function esc(s) {
     .replace(/"/g, '&quot;');
 }
 
+// The dashboard's "All Time" option has no dates of its own, so the endpoint
+// resolves it to sentinel bounds for the query and the file name. Renderers go
+// through here so the report reads "All time" instead of exposing sentinels.
+const ALL_TIME_FROM = '0000-01-01';
+const ALL_TIME_TO = '9999-12-31';
+
+function rangeLabel(meta, sep = ' → ') {
+  const from = meta && meta.from;
+  const to = meta && meta.to;
+  if (!from || !to || (from === ALL_TIME_FROM && to === ALL_TIME_TO)) return 'All time';
+  return `${from}${sep}${to}`;
+}
+
 // The service name / service date were stored as eventName / eventDate in the
 // very first schema, then renamed to serviceType / month. Both the raw form
 // record (used during background processing) and a DB row (used for on-demand
@@ -190,7 +203,7 @@ function combinedHTML(meta, rows, logoPath) {
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<title>Combined Client Feedback Report – ${esc(meta.from)} to ${esc(meta.to)}</title>
+<title>Combined Client Feedback Report – ${esc(rangeLabel(meta, ' to '))}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -201,7 +214,7 @@ function combinedHTML(meta, rows, logoPath) {
       ${logo}<span style="font-size:20px;font-weight:800;color:${BLACK}">Combined Client Feedback Report</span>
     </td></tr>
     <tr><td style="padding:28px 32px">
-      <p style="margin:0;color:#6b7280;font-size:13px">Date range: ${esc(meta.from)} → ${esc(meta.to)} · ${rows.length} submission(s)</p>
+      <p style="margin:0;color:#6b7280;font-size:13px">Date range: ${esc(rangeLabel(meta))} · ${rows.length} submission(s)</p>
 
       <h2 style="color:${ACCENT};font-size:18px;margin:24px 0 10px;letter-spacing:.5px">OVERALL AI ANALYSIS</h2>
       <div style="border:1px solid #e5e7eb;border-radius:10px;padding:18px 20px">
@@ -228,4 +241,4 @@ function combinedHTML(meta, rows, logoPath) {
 </html>`;
 }
 
-module.exports = { reportHTML, combinedHTML, stars, badge, esc, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, submissionDateOf, safeText };
+module.exports = { reportHTML, combinedHTML, stars, badge, esc, rangeLabel, DEPARTMENT_SCORES, scoreText, serviceNameOf, serviceDateOf, submissionDateOf, safeText };

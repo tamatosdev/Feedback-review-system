@@ -228,3 +228,84 @@ test('GET /reports regenerates a combined report when nothing is stored', async 
     await stopServer(server);
   }
 });
+
+// "All Time" sends no dates: computeRange('alltime') returns empty bounds on
+// purpose, so the endpoint has to treat empty/empty as "no filter" instead of
+// rejecting it as a missing range.
+test('sendEmail:false with no dates (All Time) covers every submission', async () => {
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    sent.length = 0;
+    const total = db.prepare('SELECT COUNT(*) AS n FROM feedback_reports').get().n;
+
+    const { res, json } = await postCombined(base, { from: '', to: '', sendEmail: false });
+
+    assert.strictEqual(res.status, 200, 'an empty range is accepted, not a 400');
+    assert.strictEqual(json.ok, true);
+    assert.strictEqual(json.allTime, true, 'the response says it was unfiltered');
+    assert.strictEqual(json.count, total, 'every row is included - nothing was filtered out');
+    assert.strictEqual(json.pdfFileName, 'combined-0000-01-01-to-9999-12-31.pdf',
+      'sentinel bounds keep the name inside COMBINED_FILE_RE');
+    assert.strictEqual(json.emailSent, false);
+    assert.strictEqual(json.emailSkipped, true);
+    assert.strictEqual(sent.length, 0, 'still no email');
+    trackReport(json.pdfFileName);
+
+    const dl = await fetch(`${base}/reports/${encodeURIComponent(json.pdfFileName)}`);
+    assert.strictEqual(dl.status, 200, 'the All Time file downloads');
+    const buf = Buffer.from(await dl.arrayBuffer());
+    assert.strictEqual(buf.subarray(0, 4).toString('latin1'), '%PDF', 'downloaded bytes are a PDF');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('only one of from/to is a 400, not a silent half-report', async () => {
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    sent.length = 0;
+    const half = await postCombined(base, { from: '2026-01-01', to: '', sendEmail: false });
+    assert.strictEqual(half.res.status, 400, 'From without To is rejected');
+    assert.ok(half.json.error, 'the rejection explains itself');
+
+    const other = await postCombined(base, { from: '', to: '2026-06-30', sendEmail: false });
+    assert.strictEqual(other.res.status, 400, 'To without From is rejected');
+
+    assert.strictEqual(sent.length, 0, 'rejected requests never send anything');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+test('the All Time file can still be regenerated when nothing is stored', async () => {
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const file = 'combined-0000-01-01-to-9999-12-31.pdf';
+  try {
+    try { fs.unlinkSync(path.join(storage.reportsDir, file)); } catch {}
+    const res = await fetch(`${base}/reports/${encodeURIComponent(file)}`);
+    assert.strictEqual(res.status, 200, 'sentinel bounds regenerate over the whole table');
+    const buf = Buffer.from(await res.arrayBuffer());
+    assert.strictEqual(buf.subarray(0, 4).toString('latin1'), '%PDF');
+  } finally {
+    await stopServer(server);
+  }
+});
+
+// dashboard.html loads the shared validator from /reportRange.js, so the file
+// has to survive the same static/fallback chain the page itself goes through.
+test('the dashboard validation script is served by the app', async () => {
+  const server = await listen();
+  const base = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const res = await fetch(`${base}/reportRange.js`);
+    assert.strictEqual(res.status, 200, '/reportRange.js is reachable');
+    const body = await res.text();
+    assert.ok(body.includes('function validate'), 'the validator is in the served file');
+    assert.ok(body.includes('ALL_TIME_RANGE'), 'the All Time key is exported');
+  } finally {
+    await stopServer(server);
+  }
+});

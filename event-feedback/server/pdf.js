@@ -2,7 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 
-const { DEPARTMENT_SCORES, scoreText, serviceDateOf, submissionDateOf, safeText } = require('./report');
+const { DEPARTMENT_SCORES, scoreText, serviceDateOf, submissionDateOf, safeText, rangeLabel } = require('./report');
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -246,7 +246,7 @@ function buildCombinedPdf(meta, rows) {
     doc.on('end', () => resolve(Buffer.concat(chunks)));
     doc.on('error', reject);
 
-    drawHeader(doc, 'Combined Client Feedback Report', `Date range: ${meta.from} → ${meta.to} · ${rows.length} submission(s)`);
+    drawHeader(doc, 'Combined Client Feedback Report', `Date range: ${rangeLabel(meta)} · ${rows.length} submission(s)`);
 
     sectionHeading(doc, 'Overall AI Analysis');
     drawLabeledLine(doc, 'Overall Summary:', meta.overallSummary);
