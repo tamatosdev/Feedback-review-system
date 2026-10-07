@@ -778,6 +778,14 @@ app.post('/api/reports/combined', async (req, res) => {
       return res.status(400).json({ ok: false, error: 'Both from and to dates are required.' });
     }
 
+    // sendEmail defaults to true so every existing caller keeps today's
+    // behaviour. The dashboard's "Generate Consolidated Report" button passes
+    // false: it only wants the file in the browser, not an email to the
+    // admin/leadership list. The scheduled six-month report does not use this
+    // endpoint at all (it sends from server/jobs/sixMonthReport.js), so its
+    // email path is independent of this flag.
+    const sendEmail = req.body?.sendEmail !== false;
+
     const rows = await queryFeedback({ from, to });
     if (!rows.length) {
       return res.status(404).json({ ok: false, error: `No feedback found between ${from} and ${to}.` });
@@ -796,16 +804,24 @@ app.post('/api/reports/combined', async (req, res) => {
 
     let emailSent = false;
     let emailError = null;
-    try {
-      if (smtpConfig.smtpPass) {
-        await sendCombinedEmail(smtpConfig, meta, pdfBuffer, pdfUrl, rows.length);
-        emailSent = true;
-      } else {
-        emailError = 'SMTP_PASS not set; email skipped.';
+    let emailSkipped = false;
+    if (sendEmail) {
+      try {
+        if (smtpConfig.smtpPass) {
+          await sendCombinedEmail(smtpConfig, meta, pdfBuffer, pdfUrl, rows.length);
+          emailSent = true;
+        } else {
+          emailError = 'SMTP_PASS not set; email skipped.';
+        }
+      } catch (err) {
+        emailError = err.message;
+        console.error('[Email] combined send failed:', err.message);
       }
-    } catch (err) {
-      emailError = err.message;
-      console.error('[Email] combined send failed:', err.message);
+    } else {
+      // Dashboard download: the button only wants the file. Skip the send
+      // entirely rather than attempting it and swallowing the result, so no
+      // transport is even constructed.
+      emailSkipped = true;
     }
 
     res.json({
@@ -815,6 +831,7 @@ app.post('/api/reports/combined', async (req, res) => {
       to,
       emailSent,
       emailError,
+      emailSkipped,
       pdfUrl,
       pdfFileName,
       pdfSize: saved.size,
@@ -833,7 +850,10 @@ app.post('/api/reports/combined', async (req, res) => {
 
 // ---------- Report downloads: disk -> storage -> regenerate on demand ----------
 const REPORT_FILE_RE = /^([A-Za-z0-9._-]+)\.(html|pdf)$/;
-const COMBINED_FILE_RE = /^combined-(\d{4}-\d{2})-to-(\d{4}-\d{2})\.(html|pdf)$/;
+// Both filename shapes are real: the dashboard endpoint writes full dates
+// (combined-2026-01-01-to-2026-12-31.pdf) while the 6-month cron writes months
+// (combined-2026-04-to-2026-09.pdf). Accept both or regeneration 404s.
+const COMBINED_FILE_RE = /^combined-(\d{4}-\d{2}(?:-\d{2})?)-to-(\d{4}-\d{2}(?:-\d{2})?)\.(html|pdf)$/;
 
 async function renderReportOnDemand(fileName) {
   const single = REPORT_FILE_RE.exec(fileName);
@@ -847,7 +867,11 @@ async function renderReportOnDemand(fileName) {
   }
   const combined = COMBINED_FILE_RE.exec(fileName);
   if (combined) {
-    const rows = await queryFeedback({ from: `${combined[1]}-01`, to: `${combined[2]}-28` });
+    // A month capture (YYYY-MM) needs day bounds padded; a full-date capture
+    // (YYYY-MM-DD) is already a bound and must not get a day appended.
+    const startBound = (v) => (v.length === 7 ? `${v}-01` : v);
+    const endBound = (v) => (v.length === 7 ? `${v}-28` : v);
+    const rows = await queryFeedback({ from: startBound(combined[1]), to: endBound(combined[2]) });
     if (!rows.length) return null;
     const overall = await analyzeCombined(rows, { apiKey: geminiApiKey });
     const meta = { from: combined[1], to: combined[2], generatedAt: new Date().toISOString(), ...overall };

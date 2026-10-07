@@ -687,28 +687,51 @@
         return;
       }
       btn.disabled = true;
-      btn.textContent = 'Generating combined report…';
+      btn.textContent = 'Generating consolidated report…';
       const resultEl = $('combinedResult');
       resultEl.classList.remove('hidden');
       resultEl.className = 'text-sm font-semibold';
-      resultEl.textContent = 'Analyzing ' + from + ' → ' + to + ' with Gemini, generating PDF and emailing admin…';
+      resultEl.textContent = 'Analyzing ' + from + ' → ' + to + ' with Gemini and building the PDF…';
       try {
         const res = await fetch('/api/reports/combined', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ from, to })
+          body: JSON.stringify({ from, to, sendEmail: false })
         });
         const json = await res.json();
         if (!res.ok || !json.ok) throw new Error(json.error || 'Generation failed.');
-        resultEl.innerHTML = `Combined report for <b>${json.count}</b> submission(s) ready — <a href="${json.pdfUrl}" target="_blank" class="text-brandDark underline font-bold">open PDF</a>. Email to admin: <b>${json.emailSent ? 'sent ✔' : 'skipped (' + (json.emailError || 'no SMTP credentials') + ')'}</b>`;
+        await downloadReport(json.pdfFileName);
+        resultEl.innerHTML = `Downloaded <b>${json.pdfFileName}</b> (${json.count} submission(s)) — no email was sent.`;
       } catch (err) {
         resultEl.className = 'text-sm font-semibold text-red-600';
         resultEl.textContent = err.message;
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Generate Combined Report for Selected Dates';
+        btn.textContent = 'Generate Consolidated Report';
       }
     });
+
+    // Pull the freshly-built PDF from the same-origin report route and save it
+    // through a temporary <a download>. The storage driver may hand back a
+    // cross-origin URL (Supabase public bucket) where an explicit download
+    // attribute is ignored and CORS can block a fetch, so /reports/:file is
+    // used instead - it reads from disk or storage and falls back to
+    // regenerating the file on demand.
+    async function downloadReport(fileName) {
+      const res = await fetch('/reports/' + encodeURIComponent(fileName));
+      if (!res.ok) throw new Error('Could not fetch the report (' + res.status + ').');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Give the browser a tick to start the save before the blob is released.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      return blob.size;
+    }
 
     $('logoutBtn').addEventListener('click', async () => {
       try { await fetch('/api/logout', { method: 'POST' }); } catch {}
